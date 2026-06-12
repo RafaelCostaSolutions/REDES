@@ -1,0 +1,11 @@
+{
+    "peer_id": "alice@CIC",
+    "rendezvous_host": "pyp2p.mfcaetano.cc",
+    "rendezvous_port": 8080,
+    "listen_port": 9000,
+    "ping_interval": 30,
+    "max_reconnect_attempts": 5,
+    "log_level": "INFO",
+    "log_to_file": false,
+    "log_dir": "logs"
+}
