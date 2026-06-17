@@ -33,7 +33,7 @@ class RendServer:
     def __init__(self, 
                 host_id: str,
                 host_port: int,
-                logs: logging = None):
+                logs: logging.Logger = None):
         
         self.host = host_id
         self.port = host_port
@@ -55,9 +55,9 @@ class RendServer:
             raise Error_Resposta_Negativa_Servidor()
         
         
-        self.log.info(f"[RDV] Sucesso em se registrar como {name}@{namespace} por {ttl}s")
+        self.log.debug(f"[RDV] Sucesso em se registrar como {name}@{namespace} por {ttl}s")
         self.log.debug(f"[RDV] Iniciando processo de auto reconnect")
-
+        
         self.auto_reregister = threading.Thread(target=self._reconect, args=[namespace, name, listen_port, ttl], daemon=True) #daemon garante que caso o programa se encerre a thread também feche
         self.auto_reregister.start()
 
@@ -67,7 +67,7 @@ class RendServer:
     def _reconect(self, namespace: str, name: str, listen_port: str, ttl: int = 7200):
         while not (self.encerrar.is_set()):
             self.encerrar.wait(ttl)
-            if not(self.encerrar.is_set()): #para garantir que não sera mandado após o fechamento da comexão
+            if not(self.encerrar.is_set()): #para garantir que não sera mandado após o fechamento da conexão
                 msg = { "type": "REGISTER", "namespace": namespace, "name": name, "port": listen_port, "ttl": ttl}
                 reconected = self._sender(msg)
                 reconected = json.loads(reconected)
@@ -91,6 +91,9 @@ class RendServer:
             raise Error_Resposta_Negativa_Servidor()
 
         list_peers = list_peers.get('peers')
+        if list_peers == []:
+            self.log.info("[RDV] Não há usuários nesse namespace, ou ele não existe")
+            return []
         final_list_peers = []
 
         if isinstance(list_peers, list) == False:
@@ -99,7 +102,7 @@ class RendServer:
         self.log.debug("[RDV] Lista de peers Obtida")
 
         for i in list_peers:
-            if isinstance(i, dict):
+            if (isinstance(i, dict)):
                     final_list_peers.append(i)
 
         return final_list_peers
@@ -125,7 +128,6 @@ class RendServer:
     def _sender(self, msg_in):
         self.log.debug(f"[RDV] Preparando para enviar: {msg_in}")
         msg = json.dumps(msg_in) + "\n"
-        self.log.debug("[RDV] Iniciando socket")
 
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -139,7 +141,7 @@ class RendServer:
         try:
             with self.em_uso:
                 sock.send(msg.encode())
-                retorno = sock.recv(4096) #alterar o tamanho máximo mais tarde
+                retorno = sock.recv(32768)
                 self.log.debug(f"[RDV] Receido: {retorno}")
                 return retorno
         
