@@ -2,6 +2,27 @@ import threading
 import time
 
 
+
+"""
+Resumo resumido:
+Usar o objeto state para guardar TODAS as informacoes, como:
+
+- Peer local
+- Lista de peers e seus estados
+- Conexoes ativas entre os peers
+- Pings e Acks
+- Informacoes do RTT
+- etc
+
+Toda vez que for settar ou pegar qualquer informacao usar o 
+
+with state_*_lock:
+
+para evitar problemas de concorrencia
+
+"""
+
+
 # Objeto para guardar estado e acessar informaçoes
 class State:
 
