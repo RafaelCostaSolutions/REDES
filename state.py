@@ -414,7 +414,7 @@ class State:
             return dict(info)
         
 
-    # Resetar conexão = Apagar histórico
+    # Resetar conexão = Apagar histórico de falhas (para o backoff exponencial)
     def reset_reconnect(
         self,
         peer_id
