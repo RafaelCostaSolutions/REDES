@@ -140,11 +140,21 @@ class State:
     def add_connection(
         self,
         peer_id,
-        conn
+        conn,
+        direction
     ):
 
         with self.connections_lock:
-            self.connections[peer_id] = conn
+
+            self.connections[
+                peer_id
+            ] = {
+
+                "socket": conn,
+
+                "direction": direction
+
+            }
 
 
     # Recupera o socket
@@ -154,7 +164,17 @@ class State:
     ):
 
         with self.connections_lock:
-            return self.connections.get(peer_id)
+
+            connection = (
+                self.connections.get(
+                    peer_id
+                )
+            )
+
+            if connection is None:
+                return None
+
+            return connection["socket"]
         
 
     # Remove o socket
@@ -165,6 +185,90 @@ class State:
 
         with self.connections_lock:
             self.connections.pop(peer_id, None)
+
+    # Usado para pegar informações da conexão com determinado peer
+    def get_connection_info(
+        self,
+        peer_id
+    ):
+
+        with self.connections_lock:
+
+            connection = (
+                self.connections.get(
+                    peer_id
+                )
+            )
+
+            if connection is None:
+                return None
+
+            return dict(connection)
+        
+    
+
+    # Retorna todas as conexões
+    def get_all_connections(
+        self
+    ):
+
+        with self.connections_lock:
+
+            return dict(
+                self.connections
+            )
+        
+    # Retorna todas as conexões inbound
+    def get_inbound_connections(
+    self
+    ):
+
+        with self.connections_lock:
+
+            return {
+
+                peer_id: info
+
+                for (
+                    peer_id,
+                    info
+                )
+
+                in self.connections.items()
+
+                if (
+                    info["direction"]
+                    ==
+                    "INBOUND"
+                )
+
+            }
+        
+    # Retorna todas as conexões outbound
+    def get_outbound_connections(
+        self
+    ):
+
+        with self.connections_lock:
+
+            return {
+
+                peer_id: info
+
+                for (
+                    peer_id,
+                    info
+                )
+
+                in self.connections.items()
+
+                if (
+                    info["direction"]
+                    ==
+                    "OUTBOUND"
+                )
+
+            }
 
 
     # Auto explicativo!
