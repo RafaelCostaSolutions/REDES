@@ -49,7 +49,6 @@ class RendServer:
         msg = {"type": "REGISTER", "namespace": namespace, "name": name, "port": listen_port, "ttl": ttl}
 
         resposta = self._sender(msg)
-        resposta = json.loads(resposta)
 
         if resposta['status'] != "OK":
             raise Error_Resposta_Negativa_Servidor()
@@ -84,8 +83,6 @@ class RendServer:
         msg = {"type": "DISCOVER", "namespace": namespace}
 
         list_peers = self._sender(msg)
-        
-        list_peers = json.loads(list_peers)
 
         if list_peers['status'] != "OK":
             raise Error_Resposta_Negativa_Servidor()
@@ -116,7 +113,6 @@ class RendServer:
         msg = {"type": "UNREGISTER", "namespace": namespace, "name": name, "port": listen_port}
 
         success_close = self._sender(msg)
-        success_close = json.loads(success_close)
 
         if success_close['status'] != "OK":
             raise Error_Resposta_Negativa_Servidor()
@@ -143,7 +139,7 @@ class RendServer:
                 sock.send(msg.encode())
                 retorno = sock.recv(32768)
                 self.log.debug(f"[RDV] Receido: {retorno}")
-                return retorno
+                return json.loads(retorno)
         
         except Exception as error:
             self.log.info(f"[RDV] Erro ao mandar mensagem: {error}")
