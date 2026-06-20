@@ -42,50 +42,22 @@ import socket
 import logging
 import threading
 from uuid import uuid4
-from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from state import State
 
-@dataclass 
-class ts_info:
-    _ts_last_ping: float = None
-    _ts_last_pong: float = None
-
-    def __post_init__(self):
-        self._ping_lock = threading.Lock()
-        self._pong_lock = threading.Lock()
-
-    def change_last_ping(self, new_ts):
-        with self._ping_lock:
-            self._ts_last_ping = new_ts
-
-    def change_last_pong(self, new_ts):
-        with self._pong_lock:
-            self._ts_last_pong = new_ts
-
-    def get_last_ping(self):
-        with self._ping_lock:
-            return self._ts_last_ping
-
-    def get_last_pong(self):
-        with self._pong_lock:
-            return self._ts_last_pong
-
 
 class PeerConnection:
-    def __init__(self, my_ip: str, my_port: int, features:list, peer_states: State =None, logs: logging.Logger = None):
+    def __init__(self, my_ip: str, my_port: int, features:list, states: State, logs: logging.Logger = None):
         self.my_ip = my_ip
         self.my_port = my_port
-        self.peer_states = peer_states
+        self.peer_states = states
         self.features = features
         self.log = logs
 
         self.my_peer_id = None
         self.peer_ttl = None
 
-        self.infos = {} #para se colocar peer junto das informações de tempo
-        self.infos_lock = threading.Lock()
         self.threads_ativas = {}
         self.thread_ativas_lock = threading.Lock()
 
@@ -102,12 +74,12 @@ class PeerConnection:
             self.log.info(f"[Peer_connection] Starting")
             self.sock_ouvinte = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock_ouvinte.bind((self.my_ip,self.my_port))
-            self.log.debug(f"[Peer_connection] Ouvindo mensagens")
+            self.log.debug(f"[Peer_connection] Listening for connections")
             self.listening.set()
             ouvinte = threading.Thread(target=self._first_contact)
             ouvinte.start()
         except Exception as error:
-            self.log.warning(f"[Peer_connection] Erro ao começar, {error}")
+            self.log.warning(f"[Peer_connection] Error on startup, {error}")
 
 
     #Primeiro contato com peers que tentam se conectar ao servidor
@@ -122,12 +94,12 @@ class PeerConnection:
                 received = json.loads(received)
 
                 if received.get('type') != "HELLO" or 'peer_id' not in received: #Verificação se a mensagem recebida é um Hello com a id
-                    self.log.debug(f"[Peer_connection] Protocolo de handshake impróprio")
+                    self.log.debug(f"[Peer_connection] Handshake protocoll wrong")
                     peer_socket.close()
                     continue
 
 
-                self.log.debug(f"[Peer_connection] Conexão estabelecida com {received['peer_id']}")
+                self.log.debug(f"[Peer_connection] Connection stabilished with {received.get('peer_id')}")
 
                 #coletando informações e guardando elas
                 id = received['peer_id']
@@ -135,8 +107,6 @@ class PeerConnection:
                 self.peer_states.add_connection(id, peer_socket,"INBOUND") #passa o socket e direção para a state table
                 with self.senders_locks_lock:
                     self.senders_locks[id] = threading.Lock()
-                with self.infos_lock:
-                    self.infos[id] = ts_info()
 
                 #respondendo
                 resposta = {"type":"HELLO_OK","peer_id":self.my_peer_id,"version":"1.0","features":self.features,"ttl":self.peer_ttl}
@@ -149,7 +119,7 @@ class PeerConnection:
                     self.threads_ativas[id] = tr
 
             except Exception as e:
-                self.log.warning(f"[Peer_connection] Erro: {e}")
+                self.log.warning(f"[Peer_connection] Error: {e}")
                 try:
                     if peer_socket is not None:
                         try:
@@ -161,7 +131,7 @@ class PeerConnection:
 
     #Chamado para fazer a conexão com um peer descoberto (Outbound)
     def Connect_Out(self, peer_id, ip, port):
-        self.log.debug(f"[Peer_connection] Se conectando a {peer_id}")
+        self.log.debug(f"[Peer_connection] Connectiong to {peer_id}")
         lock_created = False
         connection_added = False
         sock = None
@@ -177,8 +147,6 @@ class PeerConnection:
             tipo = resposta.get('type')
 
             if tipo == "HELLO_OK": #conexão aceita, adiciona as informações nos states
-                with self.infos_lock:
-                    self.infos[peer_id] = ts_info()
                 with self.senders_locks_lock:
                     self.senders_locks[peer_id] = threading.Lock()
                     lock_created = True
@@ -190,14 +158,14 @@ class PeerConnection:
                     self.threads_ativas[peer_id] = tr
 
             else:
-                self.log.debug(f"[Peer_connection] Falha ao se conectar com {peer_id}")
+                self.log.debug(f"[Peer_connection] Failed to connect with {peer_id}")
                 with self.senders_locks_lock:
                     self.senders_locks.pop(peer_id, None)
                 self.peer_states.remove_connection(peer_id)
                 self.peer_states.register_failed_attempt(peer_id)
 
         except Exception as error:
-            self.log.debug(f"[Peer_connection] Falha ao se conectar com {peer_id} devido a {error}")
+            self.log.debug(f"[Peer_connection] Failed to connect to {peer_id} reson: {error}")
             if lock_created:
                 with self.senders_locks_lock:
                     self.senders_locks.pop(peer_id, None)
@@ -214,10 +182,10 @@ class PeerConnection:
     def _disconnect_inbound(self,msg, peer): 
         Final_words = msg
         with self.thread_ativas_lock:
-            self.threads_ativas.pop(peer)
+            self.threads_ativas.pop(peer, None)
         sock = self.peer_states.get_connection(peer)
 
-        msg_funeral = {'type':"BYE_OK", 'msg_id':Final_words.get("uuid"), 
+        msg_funeral = {'type':"BYE_OK", 'msg_id':Final_words.get('msg_id'), 
                        'src':Final_words.get("dst"), 'dst':Final_words.get("src"),
                        'ttl':self.peer_ttl}
         
@@ -227,13 +195,12 @@ class PeerConnection:
         with self.senders_locks_lock:
             self.senders_locks.pop(peer, None)
         self.peer_states.remove_peer(peer)
-        with self.infos_lock:
-            self.infos.pop(peer, None)
-        self.log.debug(f"[Peer_connection] Conexão com {peer} encerrada")
+        self.log.debug(f"[Peer_connection] Connection with {peer} ended")
+
 
     #Disconecta de todos os peers possíveis
     def Full_disconnect(self):
-        self.log.info(f"[Peer_connection] Começando processo de encerramento")
+        self.log.info(f"[Peer_connection] Ending process")
         self.listening.clear()
         with self.thread_ativas_lock:
             for j in list(self.threads_ativas.keys()): #garante o encerramento de cada thread
@@ -242,111 +209,126 @@ class PeerConnection:
         my_id = self.my_peer_id
 
         for i in self.peer_states.get_all_peers():
-            self.log.debug(f"[Peer_connection] Encerrando conexão com {i}")
+            self.log.debug(f"[Peer_connection] Ending connection with {i}")
             sock = self.peer_states.get_connection(i)
+            if sock is None: #proteção para o caso da sock ter um erro grave ou ser desligada antes do procedimento
+                self.peer_states.remove_peer(i)
+                continue
 
             try:
                 specific_uuid = str(uuid4())
-                msg = {'type':"BYE", 'uuid':specific_uuid, 'src': my_id, 'dst': i, 'reason': "Closing all connections", 'ttl': self.peer_ttl}
+                msg = {'type':"BYE", 'msg_id':specific_uuid, 'src': my_id, 'dst': i, 'reason': "Closing all connections", 'ttl': self.peer_ttl}
                 self.Sender(msg, i)
                 sock.settimeout(5.0)
                 retorno = json.loads(sock.recv(32768).decode())
 
-                if (retorno.get('type') == "BYE_OK") and (retorno.get('uuid') == specific_uuid):
-                    self.log.debug(f"[Peer_connection] BYE_OK recebido de {i}")
+                if (retorno.get('type') == "BYE_OK") and (retorno.get('msg_id') == specific_uuid):
+                    self.log.debug(f"[Peer_connection] BYE_OK received from {i}")
                     self.peer_states.remove_connection(i)
                     sock.close()
                     self.peer_states.remove_peer(i)
                     with self.senders_locks_lock:
                         self.senders_locks.pop(i, None)
-                    with self.infos_lock:
-                        self.infos.pop(i, None)
+
 
                 else:
-                    self.log.debug(f"[Peer_connection] Falha ao receber BYE_OK correto, encerrando memso assim")
+                    self.log.debug(f"[Peer_connection] Dind't received BYE_OK, ending connection anyway")
                     self.peer_states.remove_connection(i)
                     sock.close()
                     self.peer_states.remove_peer(i)
                     with self.senders_locks_lock:
                         self.senders_locks.pop(i, None)
-                    with self.infos_lock:
-                        self.infos.pop(i, None)
+
 
             except Exception as e:
-                self.log.warning(f"[Peer_connection] Erro: {e}, desconectando mesmo assim")
-                sock.close()
-                self.peer_states.remove_peer(i)
-                with self.senders_locks_lock:
-                    self.senders_locks.pop(i, None)
-                with self.infos_lock:
-                    self.infos.pop(i, None)
+                self.log.warning(f"[Peer_connection] Erro: {e}, ending connection anyway")
+                if sock is None: #para o caso da sock ter sido fechada por outro programa antes
+                    self.peer_states.remove_peer(i)
+
+                else: 
+                    sock.close()
+                    self.peer_states.remove_peer(i)
+                    with self.senders_locks_lock:
+                        self.senders_locks.pop(i, None)
+
         return True
     
     #Escuta cada peer conectado e prepara a resposta necess-aria
     def _receiver_handler(self, peer):
         connected_scokect: socket = self.peer_states.get_connection(peer)
-        connected_scokect.settimeout(2) #Para que a cada 2 segundos o thread não trave em recv
+        connected_scokect.settimeout(2) #Para que a cada 2 segundos o thread não trave
+        max_msg = 32768 #tamanho máximo de mensagens
+
+        #Usado para ler mensagens e fazer o buffer delas até se obter o \n 
+        #(demorou para lembrar que o TCP nãp garante a chegada completa da mensagem)
+        reader_conn = connected_scokect.makefile('rb')
+
         while (self.listening.is_set()):
             try:
                 if self.listening.is_set():
                     try:
-                        recebido = connected_scokect.recv(32768) #tamanho máximo de mensagens
+                        recebido = reader_conn.readline()
+
+                        #tratamento de tamanho da mensagem
+                        if len(recebido) > max_msg:
+                            self.log.debug(f"[MSG] {peer}: exceed the limit of characters")
+                            continue
+
                         recebido = json.loads(recebido.decode())
                         tempo = datetime.now(timezone.utc).isoformat()
                         tipo = recebido.get('type')
-                    except:
+
+                    #no caso de um timeout só se quer que o loop volte do começo, outros erros caem para o outro except
+                    except socket.timeout:
                         continue
 
                     if tipo == "PING":
-                        msg = {'type':"PONG", 'msg_id':recebido.get("uuid"), "timestamp":tempo, "ttl":self.peer_ttl}
+                        msg = {'type':"PONG", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
                         self.Sender(msg, peer)
 
                     elif tipo == "SEND":
                         self.log.info(f"[MSG] {peer}: {recebido.get('payload')}")
                         if recebido.get('require_ack'):
-                            msg = {'type':"ACK", 'msg_id':recebido.get("uuid"), "timestamp":tempo, "ttl":self.peer_ttl}
+                            msg = {'type':"ACK", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
                             self.Sender(msg, peer)
 
                     elif tipo == "PUB":
                         self.log.info(f"[MSG] {peer}: {recebido.get('payload')}")
                         if recebido.get('require_ack'):
-                            msg = {'type':"ACK", 'msg_id':recebido.get("uuid"), "timestamp":tempo, "ttl":self.peer_ttl}
+                            msg = {'type':"ACK", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
                             self.Sender(msg, peer)
 
                     elif tipo == "BYE":
-                        self.log.info(f"[Peer_connection] Pedido de fechamento de conexão de {peer}, devido a {recebido.get('reason')}")
+                        self.log.info(f"[Peer_connection] Asked to close connection from {peer}, reason: {recebido.get('reason')}")
                         self._disconnect_inbound(recebido, peer)
                         break #Finalisa a thread, visto que, o self.listening.is_set() fecharia todas as conexões
-
+                    
                     elif tipo == "PONG":
-                        self.peer_states.remove_pending_ping(recebido.get("uuid"))
-                        with self.infos_lock:
-                            info = self.infos.get(peer)
-                            if info:
-                                info.change_last_pong(time.monotonic())
-                                self.log.debug(f"[Peer_connection] PONG recebido de {peer}")
-                            else:
-                                self.log.warning(f"[Peer_connection] PONG de peer sem info registrada: {peer}")
+                        uuid = recebido.get('msg_id')
+                        pong_received = time.monotonic()
+                        ping_sent = self.peer_states.pending_pings.get(uuid) #Mudar para a função que retorna o tempo do uuid caso etnha
+                        rtt = (pong_received - ping_sent) * 1000
+                        self.peer_states.set_rtt(peer, rtt)
+                        self.log.debug(f"[Peer_connection] PONG received from: {peer}")
+                        self.peer_states.remove_pending_ping(uuid)
 
 
                     elif tipo == "ACK":
-                        self.peer_states.remove_pending_ack(recebido.get("uuid"))
-                        self.log.debug(f"[Peer_connection] ACK recebido de {peer}")
+                        self.peer_states.remove_pending_ack(recebido.get('msg_id'))
+                        self.log.debug(f"[Peer_connection] ACK received from {peer}")
 
                     else:
-                        self.log.info(f"[Peer_connection] Mensagem mal formatada de {peer}")
+                        self.log.info(f"[Peer_connection] Message poorly formated from: {peer}")
                     
-
+            #trata dos erros e fecha a conexão de maneira prematura, visto que possivelmente o BYE já não funcionaria
             except Exception as e:
                 self.log.warning(f"[Peer_connection] Erro: {e}")
-                self.log.debug(f"[Peer_connection] Fechando conexão com {peer}")
+                self.log.debug(f"[Peer_connection] Ending connection with {peer}")
                 self.peer_states.remove_connection(peer)
                 connected_scokect.close()
                 with self.senders_locks_lock:
                     self.senders_locks.pop(peer, None)
                 self.peer_states.remove_peer(peer)
-                with self.infos_lock:
-                    self.infos.pop(peer, None)
                 break
 
 
@@ -357,7 +339,7 @@ class PeerConnection:
         with self.senders_locks_lock:
             lock = self.senders_locks.get(peer_id)
         if lock is None:
-            self.log.warning(f"[Peer_connection] Erro ao obter o lock ao enviar para {peer_id}")
+            self.log.warning(f"[Peer_connection] Couldn't find the lock from {peer_id}")
             return
         
         with lock:
@@ -365,8 +347,12 @@ class PeerConnection:
                 sock = self.peer_states.get_connection(peer_id)
                 if sock:
                     sock.send(msg.encode())
-                    self.log.debug(f"[Peer_connection] Mensagem enviada para {peer_id}")
+                    self.log.debug(f"[Peer_connection] Message sent to: {peer_id}")
                 else:
-                    self.log.warning(f"[Peer_connection] Não há socket para {peer_id}")
-            except:
-                self.log.warning(f"[Peer_connection] Falha ao mandar msg para: {peer_id}")
+                    self.log.warning(f"[Peer_connection] Scoket to {peer_id} does not exist")
+            except Exception as erro:
+                if isinstance(erro, (BrokenPipeError, ConnectionResetError)):
+                    self.log.warning(f"[Peer_connection] Problem when receiving messages from {peer_id}")
+                    self.peer_states.set_stale(peer_id)
+                else:
+                    self.log.warning(f"[Peer_connection] Got error:{erro} when sending msg to {peer_id}")
