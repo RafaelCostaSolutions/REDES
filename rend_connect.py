@@ -69,7 +69,6 @@ class RendServer:
             if not(self.encerrar.is_set()): #para garantir que não sera mandado após o fechamento da conexão
                 msg = { "type": "REGISTER", "namespace": namespace, "name": name, "port": listen_port, "ttl": ttl}
                 reconected = self._sender(msg)
-                reconected = json.loads(reconected)
 
             if reconected['status'] != "OK":
                 raise Error_Resposta_Negativa_Servidor()
