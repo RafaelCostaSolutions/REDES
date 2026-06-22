@@ -5,8 +5,6 @@ Keep_Alive - Responsável por mandar pings para os peers periodicamente
             → Começa o processo de mandar os Pings periodicamente
         Stop()
             → Para o processo assim que chamado
-
-
 """
 
 import logging
@@ -35,7 +33,7 @@ class Keep_Alive():
         self.intervall = ping_intervall
         self.ttl = ttl
 
-        self.log.info(f"[Keep_Alive] Starting process")
+        self.log.debug(f"[Keep_Alive] Starting process")
 
         self.running.set()
         tr = threading.Thread(target=self._run)
@@ -44,7 +42,7 @@ class Keep_Alive():
 
     #Auto explicativo
     def Stop(self):
-        self.log.info(f"[Keep_Alive] Terminating process")
+        self.log.debug(f"[Keep_Alive] Terminating process")
         self.running.clear()
         self.thread_run.join()
         self.log.debug(f"[Keep_Alive] Process ended")

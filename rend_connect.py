@@ -23,10 +23,8 @@ import socket
 import logging
 import threading
 
-class Error_Resposta_Negativa_Servidor(Exception):
-    pass
 
-class Error_Falha_Socket(Exception):
+class Error_Falha_Server(Exception):
     pass
 
 class RendServer:
@@ -51,7 +49,7 @@ class RendServer:
         resposta = self._sender(msg)
 
         if resposta['status'] != "OK":
-            raise Error_Resposta_Negativa_Servidor()
+            raise Error_Falha_Server("[RDV] Type of message received is missmatched")
         
         
         self.log.debug(f"[RDV] Sucesso em se registrar como {name}@{namespace} por {ttl}s")
@@ -71,29 +69,29 @@ class RendServer:
                 reconected = self._sender(msg)
 
             if reconected['status'] != "OK":
-                raise Error_Resposta_Negativa_Servidor()
+                raise Error_Falha_Server("[RDV] Type of message received is missmatched")
             
             self.log.debug(f"[RDV] Sucesso em refrescara conexão com o servidor")
 
     #Função auxiliar para retornar a lista de peers 
     def decoberta(self, namespace: str = None):
-        self.log.info("[RDV] Requisitando lista de peers")
+        self.log.debug("[RDV] Requisitando lista de peers")
 
         msg = {"type": "DISCOVER", "namespace": namespace}
 
         list_peers = self._sender(msg)
 
         if list_peers['status'] != "OK":
-            raise Error_Resposta_Negativa_Servidor()
+            raise Error_Falha_Server("[RDV] Type of message received is missmatched")
 
         list_peers = list_peers.get('peers')
         if list_peers == []:
-            self.log.info("[RDV] Não há usuários nesse namespace, ou ele não existe")
+            self.log.info("[RDV] No peers in this namespace, or it does not exist")
             return []
         final_list_peers = []
 
         if isinstance(list_peers, list) == False:
-            raise Error_Resposta_Negativa_Servidor()
+            raise Error_Falha_Server("[RDV] Not received a list for the peers")
         
         self.log.debug("[RDV] Lista de peers Obtida")
 
@@ -114,7 +112,7 @@ class RendServer:
         success_close = self._sender(msg)
 
         if success_close['status'] != "OK":
-            raise Error_Resposta_Negativa_Servidor()
+            raise Error_Falha_Server("[RDV] Type of message received is missmatched")
         
         self.log.info(f"[RDV] Temino da conxão {name}@{namespace} confirmado")
         return
@@ -128,17 +126,30 @@ class RendServer:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((self.host , self.port))
 
-        except:
-            self.log.info(f"[RDV] Erro ao se conectar com o servidor")
-            raise Error_Falha_Socket
+            try:
+                with self.em_uso:
+                    sock.send(msg.encode())
 
+            except Exception as error:
+                self.log.info(f"[RDV] Erro ao mandar mensagem: {error}")
 
-        try:
-            with self.em_uso:
-                sock.send(msg.encode())
-                retorno = sock.recv(32768)
-                self.log.debug(f"[RDV] Receido: {retorno}")
-                return json.loads(retorno)
-        
-        except Exception as error:
-            self.log.info(f"[RDV] Erro ao mandar mensagem: {error}")
+            retorno = sock.recv(32768)
+            self.log.debug(f"[RDV] Receido: {retorno}")
+
+            try:
+                if retorno is None:
+                    raise Error_Falha_Server("[RDV] Got None instead of a message")
+                        
+                retorno = json.loads(retorno)
+                return retorno
+
+            except:
+                raise Error_Falha_Server("[RDV] Message recived is not a json")
+            
+        finally:
+            self.log.warning(f"[RDV] Could not connect to the server, closing socket")
+
+            try:
+                sock.close()
+            except:
+                Error_Falha_Server("[RDV] Falha crítica, necessário reiniciar o programa")

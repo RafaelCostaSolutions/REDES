@@ -299,7 +299,7 @@ class PeerConnection:
                             self.Sender(msg, peer)
 
                     elif tipo == "BYE":
-                        self.log.info(f"[Peer_connection] Asked to close connection from {peer}, reason: {recebido.get('reason')}")
+                        self.log.debug(f"[Peer_connection] Asked to close connection from {peer}, reason: {recebido.get('reason')}")
                         self._disconnect_inbound(recebido, peer)
                         break #Finalisa a thread, visto que, o self.listening.is_set() fecharia todas as conexões
                     
@@ -318,7 +318,7 @@ class PeerConnection:
                         self.log.debug(f"[Peer_connection] ACK received from {peer}")
 
                     else:
-                        self.log.info(f"[Peer_connection] Message poorly formated from: {peer}")
+                        self.log.debug(f"[Peer_connection] Message poorly formated from: {peer}")
                     
             #trata dos erros e fecha a conexão de maneira prematura, visto que possivelmente o BYE já não funcionaria
             except Exception as e:
