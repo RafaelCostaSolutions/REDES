@@ -42,17 +42,17 @@ class RendServer:
 
     #Faz o registro inicial        
     def registrar(self, namespace: str, name: str, listen_port: str, ttl: int = 7200):
-        self.log.info(f"[RDV] Se registrando como {name}@{namespace} por {ttl}s")
+        self.log.debug(f"[RDV] Se registrando como {name}@{namespace} por {ttl}s")
 
         msg = {"type": "REGISTER", "namespace": namespace, "name": name, "port": listen_port, "ttl": ttl}
 
         resposta = self._sender(msg)
 
-        if resposta['status'] != "OK":
-            raise Error_Falha_Server("[RDV] Type of message received is missmatched")
+        if resposta.get('status') != "OK":
+            raise Error_Falha_Server("[RDV] Type of message received is missmatched in register")
         
         
-        self.log.debug(f"[RDV] Sucesso em se registrar como {name}@{namespace} por {ttl}s")
+        self.log.info(f"[RDV] Sucesso em se registrar como {name}@{namespace} por {ttl}s")
         self.log.debug(f"[RDV] Iniciando processo de auto reconnect")
         
         self.auto_reregister = threading.Thread(target=self._reconect, args=[namespace, name, listen_port, ttl], daemon=True) #daemon garante que caso o programa se encerre a thread também feche
@@ -62,16 +62,28 @@ class RendServer:
 
     # Realisa a conexão peródica com o ttl setado
     def _reconect(self, namespace: str, name: str, listen_port: str, ttl: int = 7200):
+        reconected = None
+
+        #continua a reconectar até que o programa seja encerrado
         while not (self.encerrar.is_set()):
+            
+            #espera o tempo de reconnect setado nas configs, usa o .encerrar para que, caso use o 
+            # fechar_conexão não fique travado
             self.encerrar.wait(ttl)
             if not(self.encerrar.is_set()): #para garantir que não sera mandado após o fechamento da conexão
                 msg = { "type": "REGISTER", "namespace": namespace, "name": name, "port": listen_port, "ttl": ttl}
                 reconected = self._sender(msg)
 
-            if reconected['status'] != "OK":
-                raise Error_Falha_Server("[RDV] Type of message received is missmatched")
+            #Não é um erro, caso seja chamado o encerrar no meio do processo o reconected tera None
+            if reconected == None:
+                self.log.debug(f"[RDV] Closing reconnect process in the middle of operations")
             
-            self.log.debug(f"[RDV] Sucesso em refrescara conexão com o servidor")
+            #Se não foi encerrado, checa a mensagem recebid
+            else:
+                if reconected.get('status') != "OK":
+                    raise Error_Falha_Server("[RDV] Type of message received is missmatched in retry")
+                
+                self.log.debug(f"[RDV] Sucesso em refrescara conexão com o servidor")
 
     #Função auxiliar para retornar a lista de peers 
     def decoberta(self, namespace: str = None):
@@ -81,8 +93,8 @@ class RendServer:
 
         list_peers = self._sender(msg)
 
-        if list_peers['status'] != "OK":
-            raise Error_Falha_Server("[RDV] Type of message received is missmatched")
+        if list_peers.get('status') != "OK":
+            raise Error_Falha_Server("[RDV] Type of message received is missmatched in discover")
 
         list_peers = list_peers.get('peers')
         if list_peers == []:
@@ -112,14 +124,14 @@ class RendServer:
         success_close = self._sender(msg)
 
         if success_close['status'] != "OK":
-            raise Error_Falha_Server("[RDV] Type of message received is missmatched")
+            raise Error_Falha_Server("[RDV] Type of message received is missmatched in closing")
         
-        self.log.info(f"[RDV] Temino da conxão {name}@{namespace} confirmado")
+        self.log.debug(f"[RDV] Termino da conxão {name}@{namespace} confirmado")
         return
 
     #Função utilisada para enviar as mensagens ao servidor
     def _sender(self, msg_in):
-        self.log.debug(f"[RDV] Preparando para enviar: {msg_in}")
+        self.log.debug(f"[RDV] Sending to server: {msg_in}")
         msg = json.dumps(msg_in) + "\n"
 
         try:
@@ -131,7 +143,7 @@ class RendServer:
                     sock.send(msg.encode())
 
             except Exception as error:
-                self.log.info(f"[RDV] Erro ao mandar mensagem: {error}")
+                self.log.warning(f"[RDV] Erro ao mandar mensagem: {error}")
 
             retorno = sock.recv(32768)
             self.log.debug(f"[RDV] Receido: {retorno}")

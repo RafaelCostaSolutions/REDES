@@ -113,7 +113,14 @@ class State:
         with self.peers_lock:
             return dict(self.peers)
         
+    def get_peer_info(
+            self,
+            peer_id
+    ):
 
+        with self.peers_lock:
+            return self.peers[peer_id]
+        
     # Remove peer da "lista" de peers
     def remove_peer(
         self,

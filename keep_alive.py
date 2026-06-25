@@ -24,6 +24,7 @@ class Keep_Alive():
         self.peer_states: State = None
         self.peer_conn: PeerConnection = None
         self.running = threading.Event()
+        self.wait_time = threading.Event()
         self.thread_run = None
 
     #Auto explicativo
@@ -33,17 +34,19 @@ class Keep_Alive():
         self.intervall = ping_intervall
         self.ttl = ttl
 
-        self.log.debug(f"[Keep_Alive] Starting process")
+        self.log.info(f"[Keep_Alive] Starting process")
 
         self.running.set()
+        self.wait_time.clear()
         tr = threading.Thread(target=self._run)
         self.thread_run = tr
         tr.start()
 
     #Auto explicativo
     def Stop(self):
-        self.log.debug(f"[Keep_Alive] Terminating process")
+        self.log.info(f"[Keep_Alive] Terminating process")
         self.running.clear()
+        self.wait_time.set()
         self.thread_run.join()
         self.log.debug(f"[Keep_Alive] Process ended")
         
@@ -59,18 +62,22 @@ class Keep_Alive():
 
             # Manda ping para todos os peers cada um com um uuid específico
             for i in present_peers:
-                if self.running.is_set(): #feito que, caso se use o stop() enquanto há uma varredura de pings, ele não tenha de esperar todo o tempo
-                    unique_uuid = str(uuid4())
-                    States.add_pending_ping(unique_uuid)
+                info = States.get_peer_info(i) #informaç~eos de cada peer
 
-                    msg = {"type": "PING","msg_id": unique_uuid,"timestamp": datetime.now(timezone.utc).isoformat(),"ttl": ttl}
+                if info.get('status') == "ACTIVE": #só se deve mandar ping para os peers ativos
 
-                    try:
-                        self.log.debug(f"[Keep_Alive] Sending PING to {i}")
-                        peer_serv.Sender(msg, i)
+                    if self.running.is_set(): #feito que, caso se use o stop() enquanto há uma varredura de pings, ele não tenha de esperar todo o tempo
+                        unique_uuid = str(uuid4())
+                        States.add_pending_ping(unique_uuid)
 
-                    except Exception as error:
-                        self.log.warning(f"[Keep_Alive] Got {error} when sending ping to {i}")
+                        msg = {"type": "PING","msg_id": unique_uuid,"timestamp": datetime.now(timezone.utc).isoformat(),"ttl": ttl}
 
-            if self.running.is_set(): #mesmo motivo de garantir que o stop não fique preso por 5 segundos quando o processo parar
-                self.running.wait(timeout=intervall)
+                        try:
+                            self.log.debug(f"[Keep_Alive] Sending PING to {i}")
+                            peer_serv.Sender(msg, i)
+
+                        except Exception as error:
+                            self.log.warning(f"[Keep_Alive] Got {error} when sending ping to {i}")
+
+            if self.wait_time.wait(timeout=intervall): #mesmo motivo de garantir que o stop não fique preso por 5 segundos quando o processo parar
+                break

@@ -1,5 +1,6 @@
 import threading
 import logging
+import time
 
 from state import State
 from peer_connection import PeerConnection
@@ -41,6 +42,7 @@ class P2PClient:
 
         self.router = MessageRouter(
             state=self.state,
+            peer_connection=self.peer_conn,
             logger=self.log
         )
 
@@ -102,7 +104,7 @@ class P2PClient:
 
     def _network_loop(self):
 
-        interval = 5
+        interval = self.config.get('discover_interval')
 
         while self.running.is_set():
 
@@ -113,7 +115,7 @@ class P2PClient:
             except Exception as e:
                 self.log.warning("Erro no loop de rede: %s", e)
 
-            self.running.wait(interval)
+            time.sleep(interval)
 
     def send_message(self, peer_id, text):
         return self.router.send_message(peer_id, text)
