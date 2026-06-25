@@ -282,7 +282,7 @@ class State:
 
             self.pending_acks[msg_id] = {
                 "peer_id": peer_id,
-                "timestamp": time.time()
+                "timestamp": time.monotonic()
             }
 
 
@@ -302,7 +302,7 @@ class State:
     ):
 
         with self.pings_lock:
-            self.pending_pings[msg_id] = time.time()
+            self.pending_pings[msg_id] = time.monotonic()
 
 
     # Auto explicativo!
@@ -372,12 +372,10 @@ class State:
 
         with self.reconnect_lock:
 
-            info = self.reconnect_info.get(
-                peer_id,
-                {
-                    "attempts": 0
-                }
-            )
+            info = self.reconnect_info.get(peer_id)
+
+            if info is None:
+                info = {"attempts": 0}
 
             info["attempts"] += 1
 
@@ -389,7 +387,7 @@ class State:
             )
 
             info["next_retry"] = (
-                time.time() +
+                time.monotonic() +
                 delay
             )
 

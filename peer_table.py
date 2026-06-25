@@ -83,7 +83,8 @@ class PeerTable:
                 peer["port"],
                 peer.get(
                     "expires_in"
-                )
+                ),
+                status="ACTIVE"
             )
 
         known_peers = (
@@ -134,8 +135,8 @@ class PeerTable:
 
             try:
 
-                # Mock para o peer connection, mudar para quando o arquivo estiver pronto
-                self.peer_connection.connect_to_peer(
+
+                self.peer_connection.Connect_Out(
                     peer_id,
                     info["ip"],
                     info["port"]
@@ -219,7 +220,7 @@ class PeerTable:
 
             # Verifica se ja deu o tempo de uma nova tentaiva de reconexão.
             if (
-                time.time()
+                time.monotonic()
                 <
                 reconnect[
                     "next_retry"
@@ -229,8 +230,8 @@ class PeerTable:
 
             try:
 
-                # Mock. Alterar quando o peer_connection ficar pronto.
-                self.peer_connection.connect_to_peer(
+                #Alterar quando o peer_connection ficar pronto.
+                self.peer_connection.Connect_Out(
                     peer_id,
                     info["ip"],
                     info["port"]
@@ -247,7 +248,12 @@ class PeerTable:
                     peer_id
                 )
 
-            except Exception:
+            except Exception as e:
+                self.log.warning(
+                    "[PeerTable] Falha ao reconectar %s: %s",
+                    peer_id,
+                    e
+                )
 
                 self.state.register_failed_attempt(
                     peer_id
