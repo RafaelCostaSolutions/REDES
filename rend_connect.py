@@ -146,9 +146,8 @@ class RendServer:
             except:
                 raise Error_Falha_Server("[RDV] Message recived is not a json")
             
-        finally:
+        except:
             self.log.warning(f"[RDV] Could not connect to the server, closing socket")
-
             try:
                 sock.close()
             except:

@@ -303,7 +303,25 @@ class State:
 
         with self.pings_lock:
             self.pending_pings[msg_id] = time.monotonic()
+    
+    # Retorna o tempo em que o ping foi enviado
+    def get_pending_ping_time(
+            self, 
+            msg_id
+    ):
+        
+        with self.pings_lock:
 
+            tempo = (
+                self.pending_pings.get(
+                    msg_id
+                )
+            )
+
+            if tempo is None:
+                return None
+
+            return tempo
 
     # Auto explicativo!
     def remove_pending_ping(
