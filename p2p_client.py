@@ -1,0 +1,161 @@
+import threading
+import logging
+
+from state import State
+from peer_connection import PeerConnection
+from peer_table import PeerTable
+from keep_alive import Keep_Alive
+from message_router import MessageRouter
+from rend_connect import RendServer
+
+
+"""
+Resumo resumido:
+
+Esse arquivo, simplificando, apenas inicializa os serviços, não faz nada por si mesmo.
+Logo, não vejo necessidade de colocar muitos comentários no código
+"""
+
+
+class P2PClient:
+
+    def __init__(self, config: dict):
+
+        self.log = logging.getLogger("P2PClient")
+
+        self.state = State(config)
+
+        self.rend = RendServer(
+            host_id=config["rendezvous_host"],
+            host_port=config["rendezvous_port"],
+            logs=self.log
+        )
+
+        self.peer_conn = PeerConnection(
+            my_ip="0.0.0.0",
+            my_port=config["listen_port"],
+            features=[],
+            states=self.state,
+            logs=self.log
+        )
+
+        self.router = MessageRouter(
+            state=self.state,
+            logger=self.log
+        )
+
+        self.peer_table = PeerTable(
+            state=self.state,
+            rend_server=self.rend,
+            peer_connection=self.peer_conn,
+            logger=self.log
+        )
+
+        self.keep_alive = Keep_Alive(
+            logs=self.log
+        )
+
+        self.config = config
+
+        self.running = threading.Event()
+        self.running.set()
+
+        self.worker_thread = None
+
+    def start(self):
+
+        self.log.info("P2PClient Iniciando...")
+
+
+        # Começa a esperar conexões de peers
+        self.peer_conn.Start(
+            self.state.name,
+            self.state.namespace
+        )
+
+
+        # Faz possível peers te "enxergarem"
+        self.rend.registrar(
+            self.state.namespace,
+            self.state.name,
+            self.state.listen_port
+        )
+
+
+        # Inicia os pings de tempo em tempo
+        self.keep_alive.Start(
+            self.state,
+            self.peer_conn,
+            self.config.get("ping_interval", 30),
+            ttl=1
+        )
+
+
+        # Essa thread é usada para conexões, discovery e reconexão
+        self.worker_thread = threading.Thread(
+            target=self._network_loop,
+            daemon=True
+        )
+        self.worker_thread.start()
+
+        self.log.info("P2PClient Iniciou")
+
+    def _network_loop(self):
+
+        interval = 5
+
+        while self.running.is_set():
+
+            try:
+                self.peer_table.refresh_peers()
+                self.peer_table.connect_new_peers()
+                self.peer_table.reconnect_stale_peers()
+            except Exception as e:
+                self.log.warning("Erro no loop de rede: %s", e)
+
+            self.running.wait(interval)
+
+    def send_message(self, peer_id, text):
+        return self.router.send_message(peer_id, text)
+
+    def publish(self, text):
+        return self.router.publish("broadcast", text)
+
+    def get_peers(self):
+        return self.state.get_all_peers()
+
+    def get_connections(self):
+        return self.state.get_all_connections()
+
+    def get_rtt(self, peer_id):
+        return self.state.get_rtt(peer_id)
+
+    def reconnect(self):
+        return self.peer_table.reconnect_stale_peers()
+
+    def shutdown(self):
+
+        self.log.info("Desligando P2PClient...")
+
+        self.running.clear()
+
+        try:
+            self.keep_alive.Stop()
+        except:
+            pass
+
+        try:
+            self.peer_conn.Full_disconnect()
+        except:
+            pass
+
+        try:
+            self.rend.fechar_conexão(
+                self.state.namespace,
+                self.state.name,
+                self.state.listen_port
+            )
+        except:
+            pass
+
+        self.log.info("P2PClient parou")
