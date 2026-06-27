@@ -143,6 +143,23 @@ class P2PClient:
 
     def get_rtt(self, peer_id):
         return self.state.get_rtt(peer_id)
+    
+    def show_all_rtt(self):
+
+        all_rtt = self.state.get_all_rtt()
+
+        if not all_rtt:
+
+            print("Nenhum RTT disponível.")
+
+            return
+
+        for peer_id, stats in all_rtt.items():
+
+            self.log.info(
+                f"{peer_id}: "
+                f"médio={stats['average']:.2f} ms | "
+            )
 
     def reconnect(self):
         return self.peer_table.reconnect_stale_peers()

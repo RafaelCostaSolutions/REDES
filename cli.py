@@ -197,7 +197,7 @@ class CLI:
         """Exibe RTT médio por peer."""
         logger.info("Exibindo RTT médio por peer")
         try:
-            self.client.get_rtt()
+            self.client.show_all_rtt()
         except Exception as e:
             print(f"[CLI] Erro ao exibir RTT: {e}")
             logger.error("Erro em /rtt: %s", e)

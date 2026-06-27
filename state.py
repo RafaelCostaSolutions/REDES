@@ -392,6 +392,18 @@ class State:
         with self.rtt_lock:
             return self.rtt.get(peer_id)
         
+    
+    def show_all_rtt(
+        self
+    ):
+
+        with self.rtt_lock:
+
+            return dict(
+                self.rtt
+            )
+
+        
 
 
     # Resumo da função: Conexão falhou? É feito o backoff exponencial
