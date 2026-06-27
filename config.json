@@ -3,7 +3,7 @@
     "rendezvous_host": "pyp2p.mfcaetano.cc",
     "rendezvous_port": 8080,
     "listen_port": 9000,
-    "ping_interval": 30,
+    "discover_interval": 30,
     "keepalive_interval": 30,
     "max_reconnect_attempts": 5,
     "rdv_ttl": 7200,

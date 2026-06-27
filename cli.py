@@ -6,7 +6,7 @@ Responsável por ler comandos do usuário e delegar às camadas corretas.
 import logging
 import shlex
 
-logger = logging.getLogger("CLI")
+logger = logging.getLogger("P2PClient")
 
 
 HELP_TEXT = """
@@ -134,7 +134,7 @@ class CLI:
         scope = args[0] if args else None
         logger.info("Listando peers (escopo=%s)", scope or "todos")
         try:
-            self.client.list_peers(scope)
+            self.client.get_peers(scope)
         except Exception as e:
             print(f"[CLI] Erro ao listar peers: {e}")
             logger.error("Erro em /peers: %s", e)
@@ -179,7 +179,7 @@ class CLI:
         logger.info("Publicando PUB para %s", dst)
 
         try:
-            self.client.publish_message(dst, text)
+            self.client.publish(dst, text)
         except Exception as e:
             print(f"[CLI] Erro ao publicar mensagem: {e}")
             logger.error("Erro em /pub para %s: %s", dst, e)
@@ -188,7 +188,7 @@ class CLI:
         """Exibe conexões ativas (inbound e outbound)."""
         logger.info("Exibindo conexões ativas")
         try:
-            self.client.show_connections()
+            self.client.get_connections()
         except Exception as e:
             print(f"[CLI] Erro ao exibir conexões: {e}")
             logger.error("Erro em /conn: %s", e)
@@ -197,7 +197,7 @@ class CLI:
         """Exibe RTT médio por peer."""
         logger.info("Exibindo RTT médio por peer")
         try:
-            self.client.show_rtt()
+            self.client.get_rtt()
         except Exception as e:
             print(f"[CLI] Erro ao exibir RTT: {e}")
             logger.error("Erro em /rtt: %s", e)
@@ -207,7 +207,7 @@ class CLI:
         logger.info("Forçando reconciliação de peers")
         print("[CLI] Iniciando reconciliação de peers...")
         try:
-            self.client.force_reconnect()
+            self.client.reconnect()
         except Exception as e:
             print(f"[CLI] Erro ao reconectar: {e}")
             logger.error("Erro em /reconnect: %s", e)
@@ -229,7 +229,11 @@ class CLI:
             return
 
         level = LOG_LEVELS[level_str]
-        logging.getLogger().setLevel(level)
+        root = logging.getLogger()
+        root.setLevel(level)
+        for handler in root.handlers:
+            handler.setLevel(level)
+        logging.getLogger("P2PClient").setLevel(level)
         print(f"[CLI] Nível de log alterado para: {level_str}")
         logger.info("Nível de log alterado para %s", level_str)
 

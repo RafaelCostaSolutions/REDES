@@ -80,7 +80,8 @@ class P2PClient:
         self.rend.registrar(
             self.state.namespace,
             self.state.name,
-            self.state.listen_port
+            self.state.listen_port,
+            self.config.get("rdv_ttl")
         )
 
 
@@ -88,7 +89,7 @@ class P2PClient:
         self.keep_alive.Start(
             self.state,
             self.peer_conn,
-            self.config.get("ping_interval", 30),
+            self.config.get("keepalive_interval", 30),
             ttl=1
         )
 
@@ -123,8 +124,19 @@ class P2PClient:
     def publish(self, text):
         return self.router.publish("broadcast", text)
 
-    def get_peers(self):
-        return self.state.get_all_peers()
+    def get_peers(self, escopo):
+        peers = self.rend.decoberta(escopo)
+        dict_peers = {}
+        my_id = self.config.get("peer_id")
+
+        for i in peers:
+            if i.get('name') + '@' + i.get('namespace') != my_id:
+                dict_peers.setdefault(i.get('namespace'),[]).append(i)
+
+        for j in dict_peers:
+            self.log.info(f"#{j} :")
+            for k in dict_peers[j]:
+                self.log.info(f"- {k.get('name')} @ {k.get('ip')}:{k.get('port')}")        
 
     def get_connections(self):
         return self.state.get_all_connections()

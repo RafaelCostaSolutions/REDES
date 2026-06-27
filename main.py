@@ -15,6 +15,7 @@ import sys
 import threading
 from pathlib import Path
 
+from p2p_client import P2PClient
 from logger import setup_logging
 from cli import CLI
 
@@ -217,10 +218,12 @@ def main():
         logger.critical("Configuração inválida. Encerrando.")
         sys.exit(1)
 
+    config["name"], config["namespace"] = config.get("peer_id").split("@")
+
     # 4. Instanciar cliente P2P
     #    Troque _P2PClientStub por P2PClient quando o módulo estiver pronto:
     #    client = P2PClient(config)
-    client = _P2PClientStub(config)
+    client = P2PClient(config)
 
     # 5. Iniciar o cliente em thread separada (não bloqueia a CLI)
     client_thread = threading.Thread(target=client.start, name="P2PClient", daemon=True)

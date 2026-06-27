@@ -105,11 +105,10 @@ class State:
         with self.peers_lock:
             return self.peers.get(peer_id)
 
-    # Auto explicativo!
     def get_all_peers(
-        self
-    ):
-
+            self,
+            ):
+        
         with self.peers_lock:
             return dict(self.peers)
         
@@ -301,6 +300,12 @@ class State:
 
         with self.acks_lock:
             self.pending_acks.pop(msg_id, None)
+    
+    def get_pending_acks(
+        self,
+    ):
+         with self.acks_lock:
+            return self.pending_acks
 
     # Auto explicativo!
     def add_pending_ping(
