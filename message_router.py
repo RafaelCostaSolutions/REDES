@@ -177,17 +177,57 @@ class MessageRouter:
     # Auto Explicativo!
     def publish(
         self,
+        dst,
         payload
     ):
 
-        msg_id = str(uuid.uuid4())
+        msg_id = str(
+            uuid.uuid4()
+        )
 
-        peers = self.state.get_all_peers()
+        peers = (
+            self.state.get_all_peers()
+        )
+
+        # Se eu também faço parte do destino, exibe a mensagem localmente
+        if (
+            dst == "*"
+            or
+            self.state.namespace == dst[1:]
+        ):
+
+            self.process_pub(
+                {
+                    "src": self.state.peer_id,
+                    "payload": payload
+                }
+            )
 
         for peer_id in peers:
 
-            if peer_id == self.state.peer_id:
+            if (
+                peer_id
+                ==
+                self.state.peer_id
+            ):
                 continue
+
+            # Se não for broadcast, envia apenas para o namespace informado
+            if dst.startswith("#"):
+
+                namespace = (
+                    peer_id.split(
+                        "@",
+                        1
+                    )[1]
+                )
+
+                if (
+                    namespace
+                    !=
+                    dst[1:]
+                ):
+                    continue
 
             msg = {
 
@@ -206,10 +246,23 @@ class MessageRouter:
                 "ttl": 1
             }
 
-            self.peer_connection.Sender(msg, peer_id)
+            success = (
+                self.peer_connection.Sender(
+                    msg,
+                    peer_id
+                )
+            )
+
+            if not success:
+
+                self.log.warning(
+                    "Falha ao enviar PUB para %s",
+                    peer_id
+                )
 
         self.log.info(
-            "PUB: %s",
+            "PUB (%s): %s",
+            dst,
             payload
         )
 

@@ -121,8 +121,8 @@ class P2PClient:
     def send_message(self, peer_id, text):
         return self.router.send_message(peer_id, text)
 
-    def publish(self, text):
-        return self.router.publish("broadcast", text)
+    def publish(self, dst, text):
+        return self.router.publish(dst, text)
 
     def get_peers(self, escopo):
         peers = self.rend.decoberta(escopo)

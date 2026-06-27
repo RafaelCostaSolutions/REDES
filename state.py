@@ -393,7 +393,7 @@ class State:
             return self.rtt.get(peer_id)
         
     
-    def show_all_rtt(
+    def get_all_rtt(
         self
     ):
 
