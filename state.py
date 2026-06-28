@@ -104,6 +104,11 @@ class State:
 
         with self.peers_lock:
             return self.peers.get(peer_id)
+        
+    def get_peer_id(
+            self
+    ):
+        return self.peer_id
 
     def get_all_peers(
             self,

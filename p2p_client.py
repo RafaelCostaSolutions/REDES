@@ -125,9 +125,26 @@ class P2PClient:
         return self.router.publish(dst, text)
 
     def get_peers(self, escopo):
+
+
+        # Tratamento da string escopo
+        if escopo is None:
+            self.log.warning("Escopo inválido!")
+            return
+
+        if escopo == "*":
+            escopo = None
+
+        elif escopo.startswith("#"):
+            escopo = escopo[1:]  # remove o #
+
+        else:
+            self.log.warning("Escopo inválido!")
+            return
+        
         peers = self.rend.decoberta(escopo)
         dict_peers = {}
-        my_id = self.config.get("peer_id")
+        my_id = self.state.get_peer_id()
 
         for i in peers:
             if i.get('name') + '@' + i.get('namespace') != my_id:
@@ -140,6 +157,20 @@ class P2PClient:
 
     def get_connections(self):
         return self.state.get_all_connections()
+    
+    def show_all_connections(self):
+        with self.state.connections_lock:
+            if not self.state.connections:
+                return "Nenhuma conexão ativa."
+
+            linhas = []
+
+            for peer_id, info in self.state.connections.items():
+                linhas.append(
+                    f"{peer_id} | {info['direction']}"
+                )
+
+            return "\n".join(linhas)
 
     def get_rtt(self, peer_id):
         return self.state.get_rtt(peer_id)

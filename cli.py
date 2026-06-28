@@ -132,7 +132,7 @@ class CLI:
         /peers #ns       → filtra pelo namespace
         """
         scope = args[0] if args else None
-        logger.info("Listando peers (escopo=%s)", scope or "todos")
+        # logger.info("Listando peers (escopo=%s)", scope or "todos")
         try:
             self.client.get_peers(scope)
         except Exception as e:
@@ -188,7 +188,7 @@ class CLI:
         """Exibe conexões ativas (inbound e outbound)."""
         logger.info("Exibindo conexões ativas")
         try:
-            self.client.get_connections()
+            print(self.client.show_all_connections())
         except Exception as e:
             print(f"[CLI] Erro ao exibir conexões: {e}")
             logger.error("Erro em /conn: %s", e)

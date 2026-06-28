@@ -48,12 +48,14 @@ class PeerTable:
         self,
         namespace=None
     ):
+        print("ha")
 
         discovered = (
             self.rend_server.decoberta(
                 namespace
             )
         )   
+        print("DISCOVER:", discovered)
 
         current_peers = set()
 
@@ -97,6 +99,7 @@ class PeerTable:
                 peer_id
                 not in current_peers
             ):
+                print("Marcando", peer_id, "como STALE")
 
                 self.state.set_stale(
                     peer_id
@@ -180,8 +183,7 @@ class PeerTable:
         for (
             peer_id,
             info
-        ) in peers.items():
-            
+        ) in peers.items():           
 
             # Aqui, é verificado se houve pelo menos uma tentiva de reconexão. Se não houver, pula o peer. Mas se houver tenta fazer a reconexão.
             reconnect = (
@@ -226,11 +228,11 @@ class PeerTable:
                     "next_retry"
                 ]
             ):
+                print("É MENOR O TEMPO")
                 continue
 
             try:
-
-                #Alterar quando o peer_connection ficar pronto.
+                print("TENTATIVA RECONEXAO")
                 self.peer_connection.Connect_Out(
                     peer_id,
                     info["ip"],
