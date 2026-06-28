@@ -1,3 +1,4 @@
+
 """
 cli.py — Interface de Linha de Comando do cliente P2P
 Responsável por ler comandos do usuário e delegar às camadas corretas.
