@@ -6,6 +6,11 @@ Responsável por:
   3. Instanciar e iniciar o cliente P2P
   4. Iniciar a CLI em thread separada
   5. Aguardar encerramento e limpar recursos
+  Grupo 4 
+  Membros: Rafael Babrosa da Costa - 190058811
+  André Greff Costa - 231012700
+  Pedro Augusto Martins dos Santos - 242024692
+  Disciplina de Redes de Computadores
 """
 
 import json
