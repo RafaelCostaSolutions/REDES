@@ -1,5 +1,5 @@
 {
-    "peer_id": "alice@CIC",
+    "peer_id": "John@UNB",
     "rendezvous_host": "pyp2p.mfcaetano.cc",
     "rendezvous_port": 8080,
     "listen_port": 9000,

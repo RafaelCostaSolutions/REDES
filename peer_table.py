@@ -48,14 +48,12 @@ class PeerTable:
         self,
         namespace=None
     ):
-        print("ha")
 
         discovered = (
             self.rend_server.decoberta(
                 namespace
             )
         )   
-        print("DISCOVER:", discovered)
 
         current_peers = set()
 

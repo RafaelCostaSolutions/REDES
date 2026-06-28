@@ -62,20 +62,23 @@ class Keep_Alive():
 
             # Manda ping para todos os peers cada um com um uuid específico
             for i in present_peers:
-                info = States.get_peer_info(i) #informaç~eos de cada peer
+                if self.peer_states.get_connection(i) == None:
+                    continue
+
+                info = States.get_peer_info(i) #informações de cada peer
 
                 if info.get('status') == "ACTIVE": #só se deve mandar ping para os peers ativos
 
                     if self.running.is_set(): #feito que, caso se use o stop() enquanto há uma varredura de pings, ele não tenha de esperar todo o tempo
                         unique_uuid = str(uuid4())
-                        States.add_pending_ping(unique_uuid)
 
                         msg = {"type": "PING","msg_id": unique_uuid,"timestamp": datetime.now(timezone.utc).isoformat(),"ttl": ttl}
 
                         try:
                             self.log.debug(f"[Keep_Alive] Sending PING to {i}")
                             peer_serv.Sender(msg, i)
-
+                            States.add_pending_ping(unique_uuid)
+                            
                         except Exception as error:
                             self.log.warning(f"[Keep_Alive] Got {error} when sending ping to {i}")
 

@@ -227,7 +227,7 @@ class PeerConnection:
                     pass
 
     #Chamada quando um peer pede para se desconectar    
-    def _disconnect_inbound(self,msg, peer): 
+    def _disconnect_inbound(self, msg, peer): 
         Final_words = msg
 
         sock = self.peer_states.get_connection(peer)
@@ -254,28 +254,26 @@ class PeerConnection:
     def Full_disconnect(self):
         self.log.info(f"[Peer_connection] Ending process")
 
-
         self.listening.clear()
         if self.sock_ouvinte:  
             try:
                 self.sock_ouvinte.close()
             except Exception:
                 pass
-
-        thread_ativas_list = []
-
+        
         with self.thread_ativas_lock: #adquire cada thread, para não causar erros com lock no join
             thread_ativas_list = list(self.threads_ativas.values())
             self.threads_ativas.clear()
 
         for j in thread_ativas_list: #garante o encerramento de cada thread
-                j.join(timeout=1.0)
+                j.join(timeout=2.0)
 
         my_id = self.my_peer_id
 
         for i in self.peer_states.get_all_peers():
             self.log.debug(f"[Peer_connection] Ending connection with {i}")
             sock = self.peer_states.get_connection(i)
+
             if sock is None: #proteção para o caso da sock ter um erro grave ou ser desligada antes do procedimento
                 self.peer_states.remove_peer(i)
                 continue
@@ -288,7 +286,7 @@ class PeerConnection:
                 retorno = json.loads(sock.recv(32768).decode())
                 
                 #como em ambos esses casos se deve fechar a conexão, sera usado um finally fora para que não seja necessário repetir
-                if (retorno.get('type') == "BYE_OK") and (retorno.get('msg_id') == specific_uuid):
+                if (retorno.get('type') == 'BYE_OK') and (retorno.get('msg_id') == specific_uuid):
                     self.log.debug(f"[Peer_connection] BYE_OK received from {i}")
 
                 else:
@@ -310,6 +308,7 @@ class PeerConnection:
                 self.peer_states.remove_peer(i)
                 with self.senders_locks_lock:
                     self.senders_locks.pop(i, None)
+
         return True
     
     #Escuta cada peer conectado e prepara a resposta necess-aria
@@ -325,8 +324,12 @@ class PeerConnection:
         while (self.listening.is_set()):
             try:
                 try:
-                    part = connected_scokect.recv(32768)
+                    if self.listening.is_set():
+                        part = connected_scokect.recv(32768)
 
+                    else:
+                        break
+                    
                     if not part:
                         self.log.debug(f"[Peer_connection] Received malformed msg from {peer}")
                         break
@@ -353,8 +356,11 @@ class PeerConnection:
                         self.log.debug(f"[Peer_connection] Message received from {peer}: {recebido}")
 
                         if tipo == "PING":
-                            msg = {'type':"PONG", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
-                            self.Sender(msg, peer)
+                            if self.peer_states.get_connection(peer) != None: #se a conexão ja foi fechada não se deve mandar o ping de volta
+                                msg = {'type':"PONG", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
+                                self.Sender(msg, peer)
+                            else:
+                                pass
 
                         elif tipo == "SEND":
                             self.log.info(f"[MSG] {peer}: {recebido.get('payload')}")
@@ -369,9 +375,10 @@ class PeerConnection:
                                 self.Sender(msg, peer)
 
                         elif tipo == "BYE":
-                            self.log.debug(f"[Peer_connection] Asked to close connection from {peer}, reason: {recebido.get('reason')}")
-                            self._disconnect_inbound(recebido, peer)
-                            break
+                            if self.listening.is_set():
+                                self.log.debug(f"[Peer_connection] Asked to close connection from {peer}, reason: {recebido.get('reason')}")
+                                self._disconnect_inbound(recebido, peer)
+                            return
 
                         elif tipo == "PONG":
                             uuid = recebido.get('msg_id')
@@ -411,7 +418,7 @@ class PeerConnection:
                             self.senders_locks.pop(peer, None)
                         break
 
-                    #nesse caso o erro ocorre devido ao disconbnect, e não se deve fechar as conexão ainda
+                    #nesse caso o erro ocorre devido ao disconnect, e não se deve fechar as conexão ainda
                     else:
                         break
             
