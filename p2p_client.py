@@ -35,7 +35,7 @@ class P2PClient:
         self.peer_conn = PeerConnection(
             my_ip="0.0.0.0",
             my_port=config["listen_port"],
-            features=[],
+            features=config['features'],
             states=self.state,
             logs=self.log
         )

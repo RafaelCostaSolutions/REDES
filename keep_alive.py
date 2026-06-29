@@ -60,9 +60,19 @@ class Keep_Alive():
         while self.running.is_set():
             present_peers = States.get_all_peers()
 
+            #todos os peers que não responderam ao ultimo ping viram stale
+            for stale in States.get_pending_ping_peers():
+                peer = stale[0]
+                msg_id = stale[1]
+                if States.get_peer_info(peer).get('status') == "ACTIVE":
+                    self.log.debug(f"[Keep_Alive] {stale} did not respond to the last ping, setting as stale")
+                    States.remove_pending_ping(msg_id)
+                    States.set_stale(stale)
+
+
             # Manda ping para todos os peers cada um com um uuid específico
             for i in present_peers:
-                if self.peer_states.get_connection(i) == None:
+                if self.peer_states.get_connection(i) is None:
                     continue
 
                 info = States.get_peer_info(i) #informações de cada peer
@@ -77,7 +87,7 @@ class Keep_Alive():
                         try:
                             self.log.debug(f"[Keep_Alive] Sending PING to {i}")
                             peer_serv.Sender(msg, i)
-                            States.add_pending_ping(unique_uuid)
+                            States.add_pending_ping(unique_uuid, i)
                             
                         except Exception as error:
                             self.log.warning(f"[Keep_Alive] Got {error} when sending ping to {i}")

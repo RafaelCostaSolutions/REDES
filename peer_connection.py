@@ -202,13 +202,13 @@ class PeerConnection:
                 tr.start()
                 with self.thread_ativas_lock:
                     self.threads_ativas[peer_id] = tr
+                return True
 
             else:
                 self.log.debug(f"[Peer_connection] Failed to connect with {peer_id}")
                 with self.senders_locks_lock:
                     self.senders_locks.pop(peer_id, None)
                 self.peer_states.remove_connection(peer_id)
-                self.peer_states.register_failed_attempt(peer_id)
                 self.peer_states.set_stale(peer_id)
 
         except Exception as error:
@@ -218,13 +218,13 @@ class PeerConnection:
                     self.senders_locks.pop(peer_id, None)
             if connection_added:
                 self.peer_states.remove_connection(peer_id)
-            self.peer_states.register_failed_attempt(peer_id)
             self.peer_states.set_stale(peer_id)
             if sock is not None:
                 try:
                     sock.close()
+                    raise
                 except Exception:
-                    pass
+                    raise
 
     #Chamada quando um peer pede para se desconectar    
     def _disconnect_inbound(self, msg, peer): 

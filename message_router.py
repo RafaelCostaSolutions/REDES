@@ -69,14 +69,14 @@ class MessageRouter:
 
         if not ok:
 
-            self.log.warning(
+            self.log.debug(
                 "Falha ao enviar para %s",
                 dst
             )
 
             return False
 
-        self.log.info(
+        self.log.debug(
             "SEND %s: %s",
             dst,
             payload
@@ -255,12 +255,12 @@ class MessageRouter:
 
             if not success:
 
-                self.log.warning(
+                self.log.debug(
                     "Falha ao enviar PUB para %s",
                     peer_id
                 )
 
-        self.log.info(
+        self.log.debug(
             "PUB (%s): %s",
             dst,
             payload

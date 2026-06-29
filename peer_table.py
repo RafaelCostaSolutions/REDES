@@ -11,7 +11,6 @@ Usar o objeto PeerTable para:
 - marcar peers como STALE
 - iniciar conexões
 - controlar reconexões
-
 """
 
 
@@ -77,19 +76,22 @@ class PeerTable:
                 peer_id
             )
 
-            self.state.update_peer(
-                peer_id,
-                peer["ip"],
-                peer["port"],
-                peer.get(
-                    "expires_in"
-                ),
-                status="ACTIVE"
-            )
+            if not self.state.get_peer(peer_id):
+
+                self.state.update_peer(
+                    peer_id,
+                    peer["ip"],
+                    peer["port"],
+                    peer.get(
+                        "expires_in"
+                    ),
+                    status="ACTIVE"
+                )
 
         known_peers = (
             self.state.get_all_peers()
         )
+
 
         for peer_id in known_peers:
 
@@ -97,7 +99,7 @@ class PeerTable:
                 peer_id
                 not in current_peers
             ):
-                print("Marcando", peer_id, "como STALE")
+                self.log.debug(f"[peer_table] Marcando {peer_id} como stale")
 
                 self.state.set_stale(
                     peer_id
@@ -137,17 +139,18 @@ class PeerTable:
             try:
 
 
-                self.peer_connection.Connect_Out(
+                con = self.peer_connection.Connect_Out(
                     peer_id,
                     info["ip"],
                     info["port"]
                 )
 
-                self.log.info(
-                    "[PeerTable] "
-                    "Conectado a %s",
-                    peer_id
-                )
+                if con:
+                    self.log.info(
+                        "[PeerTable] "
+                        "Conectado a %s",
+                        peer_id
+                    )
 
                 self.state.reset_reconnect(
                     peer_id
@@ -207,14 +210,6 @@ class PeerTable:
                 self.state
                 .max_reconnect_attempts
             ):
-
-                self.log.warning(
-                    "[PeerTable] "
-                    "Máximo de tentativas "
-                    "atingido para %s",
-                    peer_id
-                )
-
                 continue
 
 
@@ -226,11 +221,10 @@ class PeerTable:
                     "next_retry"
                 ]
             ):
-                print("É MENOR O TEMPO")
                 continue
 
             try:
-                print("TENTATIVA RECONEXAO")
+                self.log.debug(f"Tentando reconexão de {peer_id}, tentativa: {attempts}")
                 self.peer_connection.Connect_Out(
                     peer_id,
                     info["ip"],
@@ -248,13 +242,15 @@ class PeerTable:
                     peer_id
                 )
 
-            except Exception as e:
-                self.log.warning(
-                    "[PeerTable] Falha ao reconectar %s: %s",
-                    peer_id,
-                    e
+            except Exception:
+                if (attempts == self.state.max_reconnect_attempts):
+                    self.log.warning(
+                    "[PeerTable] "
+                    "Máximo de tentativas "
+                    "atingido para %s",
+                    peer_id
                 )
-
+                    
                 self.state.register_failed_attempt(
                     peer_id
                 )

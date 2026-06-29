@@ -315,11 +315,12 @@ class State:
     # Auto explicativo!
     def add_pending_ping(
         self,
-        msg_id
+        msg_id,
+        peer
     ):
 
         with self.pings_lock:
-            self.pending_pings[msg_id] = time.monotonic()
+            self.pending_pings[msg_id] = [peer, time.monotonic()]
     
     # Retorna o tempo em que o ping foi enviado
     def get_pending_ping_time(
@@ -332,13 +333,24 @@ class State:
             tempo = (
                 self.pending_pings.get(
                     msg_id
-                )
+                )[1] 
             )
 
             if tempo is None:
                 return None
 
             return tempo
+        
+    def get_pending_ping_peers(
+            self
+    ):
+        peers_list = []
+        with self.pings_lock:
+            pings = self.pending_pings.keys()
+            for i in pings:
+                peers_list.append(self.pending_pings[i])
+                
+        return peers_list
 
     # Auto explicativo!
     def remove_pending_ping(
