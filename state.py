@@ -117,9 +117,12 @@ class State:
 
                 return
 
-            self.peers[peer_id]["ip"] = ip
-            self.peers[peer_id]["port"] = port
-            self.peers[peer_id]["expires_in"] = expires_in
+            peer = self.peers[peer_id]
+
+            peer["ip"] = ip
+            peer["port"] = port
+            peer["expires_in"] = expires_in
+
 
     # Auto explicativo!
     def get_peer(

@@ -75,9 +75,17 @@ class Keep_Alive():
 
                     States.remove_pending_ping(msg_id)
 
-                    States.set_stale(peer)
+                    if States.get_peer_info(peer).get("status") == "ACTIVE":
 
-                    States.register_failed_attempt(peer)
+                        self.log.debug(
+                            f"[Keep_Alive] {peer} did not respond"
+                        )
+
+                        States.remove_pending_ping(msg_id)
+
+                        States.set_stale(peer)
+
+                        States.register_failed_attempt(peer)
 
 
             # Manda ping para todos os peers cada um com um uuid específico

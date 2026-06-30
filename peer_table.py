@@ -58,14 +58,32 @@ class PeerTable:
 
             current_peers.add(peer_id)
 
-            self.state.update_peer(
-                peer_id,
-                peer["ip"],
-                peer["port"],
-                peer.get("expires_in"),
-                status="ACTIVE"
-            )
+            info = self.state.get_peer(peer_id)
 
+            if info is None:
+
+                # novo peer → entra como ACTIVE
+                self.state.update_peer(
+                    peer_id,
+                    peer["ip"],
+                    peer["port"],
+                    peer.get("expires_in"),
+                    status="ACTIVE"
+                )
+
+            else:
+
+                # 🔥 IMPORTANTE:
+                # NÃO sobrescreve status existente
+                self.state.update_peer(
+                    peer_id,
+                    peer["ip"],
+                    peer["port"],
+                    peer.get("expires_in"),
+                    status=info["status"]   # mantém STALE ou ACTIVE
+                )
+
+        # remove peers que sumiram do discover
         for peer_id in list(self.state.get_all_peers().keys()):
 
             if peer_id not in current_peers:
