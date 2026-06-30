@@ -388,9 +388,11 @@ class PeerConnection:
         connected_scokect.settimeout(2)
         max_msg = 32768
 
+
         #buffer usado para receber as mensagens,
         #necessário pois conexão TCP não garabet tudo chegar junto (dmorou para lembrar disso)
         buffer = b""
+        info = self.peer_states.get_peer_info(peer)
 
         while (self.listening.is_set()):
             try:
@@ -464,7 +466,14 @@ class PeerConnection:
                                 self.log.debug(f"[Peer_connection] PONG received from: {peer}")
                                 self.peer_states.remove_pending_ping(uuid)
 
-                                self.peer_states.update_peer(peer, status="ACTIVE")
+                                self.peer_states.update_peer(
+                                    peer,
+                                    info["ip"],
+                                    info["port"],
+                                    info.get("expires_in"),
+                                    status="ACTIVE"
+                                )
+
                                 self.peer_states.reset_reconnect(peer)
 
                         elif tipo == "ACK":

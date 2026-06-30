@@ -173,7 +173,6 @@ class PeerTable:
             if success:
 
 
-                # MUITO IMPORTANTE: volta para ACTIVE
                 self.state.update_peer(
                     peer_id,
                     info["ip"],
