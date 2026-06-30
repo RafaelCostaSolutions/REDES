@@ -96,6 +96,31 @@ class State:
                 "status": status
             }
 
+    def refresh_peer(
+        self,
+        peer_id,
+        ip,
+        port,
+        expires_in=None
+    ):
+
+        with self.peers_lock:
+
+            if peer_id not in self.peers:
+
+                self.peers[peer_id] = {
+                    "ip": ip,
+                    "port": port,
+                    "expires_in": expires_in,
+                    "status": "ACTIVE"
+                }
+
+                return
+
+            self.peers[peer_id]["ip"] = ip
+            self.peers[peer_id]["port"] = port
+            self.peers[peer_id]["expires_in"] = expires_in
+
     # Auto explicativo!
     def get_peer(
         self,

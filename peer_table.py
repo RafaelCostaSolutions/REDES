@@ -47,6 +47,7 @@ class PeerTable:
         self,
         namespace=None
     ):
+        
 
         discovered = (
             self.rend_server.decoberta(
@@ -65,6 +66,11 @@ class PeerTable:
                 f"{peer['namespace']}"
             )
 
+            self.log.debug(
+                "DISCOVER encontrou %s",
+                peer_id
+            )
+
             if (
                 peer_id
                 ==
@@ -80,22 +86,20 @@ class PeerTable:
 
             if info is None:
 
-                self.state.update_peer(
+                self.state.refresh_peer(
                     peer_id,
                     peer["ip"],
                     peer["port"],
-                    peer.get("expires_in"),
-                    status="ACTIVE"
+                    peer.get("expires_in")
                 )
 
             else:
 
-                self.state.update_peer(
+                self.state.refresh_peer(
                     peer_id,
                     peer["ip"],
                     peer["port"],
-                    peer.get("expires_in"),
-                    status="ACTIVE"
+                    peer.get("expires_in")
                 )
 
         known_peers = (

@@ -128,6 +128,17 @@ class PeerConnection:
                 #coletando informações e guardando elas
                 self.peer_states.update_peer(peer, addr[0], addr[1]) #updates the state table
                 self.peer_states.add_connection(peer, peer_socket,"INBOUND") #passa o socket e direção para a state table
+
+                info = self.peer_states.get_peer_info(peer)
+
+                self.peer_states.update_peer(
+                    peer,
+                    info["ip"],
+                    info["port"],
+                    info.get("expires_in"),
+                    status="ACTIVE"
+                )
+
                 with self.senders_locks_lock:
                     self.senders_locks[peer] = threading.Lock()
 
@@ -197,6 +208,19 @@ class PeerConnection:
                     self.senders_locks[peer_id] = threading.Lock()
                     lock_created = True
                 self.peer_states.add_connection(peer_id, sock, "OUTBOUND")
+
+                info = self.peer_states.get_peer_info(peer_id)
+
+
+                # Faz update no peer
+                self.peer_states.update_peer(
+                    peer_id,
+                    info["ip"],
+                    info["port"],
+                    info.get("expires_in"),
+                    status="ACTIVE"
+                )
+
                 connection_added = True
                 tr = threading.Thread(target=self._receiver_handler, args=[peer_id]) #Começa o processo de ouvir, igual ao do First_contact
                 tr.start()
