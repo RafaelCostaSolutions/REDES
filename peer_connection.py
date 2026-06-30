@@ -188,67 +188,114 @@ class PeerConnection:
 
     #Chamado para fazer a conexão com um peer descoberto (Outbound)
     def Connect_Out(self, peer_id, ip, port):
+
         lock_created = False
         connection_added = False
         sock = None
+
         try:
+
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((ip , port))
-            msg = {"type":"HELLO","peer_id":self.my_peer_id,"version":"1.0","features":self.features,"ttl":self.peer_ttl}
-            msg = json.dumps(msg) + "\n"
-            sock.send(msg.encode())
+
+            sock.connect((ip, port))
+
+            msg = {
+                "type": "HELLO",
+                "peer_id": self.my_peer_id,
+                "version": "1.0",
+                "features": self.features,
+                "ttl": self.peer_ttl
+            }
+
+            sock.send((json.dumps(msg) + "\n").encode())
+
             sock.settimeout(5.0)
+
             resposta = json.loads(sock.recv(1024).decode())
-            self.log.debug(f"[Peer_connection] Connection outbound - Sent to: {peer_id}")
-            tipo = resposta.get('type')
 
-            if tipo == "HELLO_OK": #conexão aceita, adiciona as informações nos states
-                sock.settimeout(None)
-                with self.senders_locks_lock:
-                    self.senders_locks[peer_id] = threading.Lock()
-                    lock_created = True
-                self.peer_states.add_connection(peer_id, sock, "OUTBOUND")
+            self.log.debug(
+                "[Peer_connection] Connection outbound - Sent to: %s",
+                peer_id
+            )
 
-                info = self.peer_states.get_peer_info(peer_id)
+            if resposta.get("type") != "HELLO_OK":
 
-
-                # Faz update no peer
-                self.peer_states.update_peer(
-                    peer_id,
-                    info["ip"],
-                    info["port"],
-                    info.get("expires_in"),
-                    status="ACTIVE"
+                self.log.debug(
+                    "[Peer_connection] HELLO recusado por %s",
+                    peer_id
                 )
 
-                connection_added = True
-                tr = threading.Thread(target=self._receiver_handler, args=[peer_id]) #Começa o processo de ouvir, igual ao do First_contact
-                tr.start()
-                with self.thread_ativas_lock:
-                    self.threads_ativas[peer_id] = tr
-                return True
+                sock.close()
 
-            else:
-                self.log.debug(f"[Peer_connection] Failed to connect with {peer_id}")
-                with self.senders_locks_lock:
-                    self.senders_locks.pop(peer_id, None)
-                self.peer_states.remove_connection(peer_id)
-                self.peer_states.set_stale(peer_id)
+                return False
+
+            sock.settimeout(None)
+
+            with self.senders_locks_lock:
+
+                self.senders_locks[peer_id] = threading.Lock()
+
+                lock_created = True
+
+            self.peer_states.add_connection(
+                peer_id,
+                sock,
+                "OUTBOUND"
+            )
+
+            connection_added = True
+
+            info = self.peer_states.get_peer_info(peer_id)
+
+            self.peer_states.update_peer(
+                peer_id,
+                info["ip"],
+                info["port"],
+                info.get("expires_in"),
+                status="ACTIVE"
+            )
+
+            tr = threading.Thread(
+                target=self._receiver_handler,
+                args=[peer_id]
+            )
+
+            tr.start()
+
+            with self.thread_ativas_lock:
+
+                self.threads_ativas[peer_id] = tr
+
+            return True
 
         except Exception as error:
-            self.log.debug(f"[Peer_connection] Failed to connect to {peer_id} reson: {error}")
+
+            self.log.debug(
+                "[Peer_connection] Failed to connect to %s: %s",
+                peer_id,
+                error
+            )
+
             if lock_created:
+
                 with self.senders_locks_lock:
+
                     self.senders_locks.pop(peer_id, None)
+
             if connection_added:
+
                 self.peer_states.remove_connection(peer_id)
+
             self.peer_states.set_stale(peer_id)
+
             if sock is not None:
+
                 try:
                     sock.close()
-                    raise
                 except Exception:
-                    raise
+                    pass
+
+            return False
 
     #Chamada quando um peer pede para se desconectar    
     def _disconnect_inbound(self, msg, peer): 
