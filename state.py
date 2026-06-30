@@ -174,6 +174,11 @@ class State:
             if peer_id in self.peers:
                 self.peers[peer_id]["status"] = "STALE"
 
+    def set_active(self, peer_id):
+        with self.peers_lock:
+            if peer_id in self.peers:
+                self.peers[peer_id]["status"] = "ACTIVE"
+
 
     # Guarda o socket
     def add_connection(
@@ -468,12 +473,16 @@ class State:
                 )
             )
 
+            now = time.monotonic()
+
             info["next_retry"] = (
-                time.monotonic() +
+                now +
                 delay
             )
 
             self.reconnect_info[peer_id] = info
+
+            print(f"[BACKOFF] peer={peer_id} attempts={info['attempts']} next_retry={info['next_retry'] - now}")
 
 
     # Faz consulta do numero de tentativas e o momento que uma nova tentiva é permitida

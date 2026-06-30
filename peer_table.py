@@ -115,6 +115,13 @@ class PeerTable:
             )
 
             if success:
+                self.state.update_peer(
+                    peer_id,
+                    info["ip"],
+                    info["port"],
+                    info.get("expires_in"),
+                    status="ACTIVE"
+                )
 
                 self.state.reset_reconnect(peer_id)
 
@@ -165,7 +172,6 @@ class PeerTable:
 
             if success:
 
-                self.state.reset_reconnect(peer_id)
 
                 # MUITO IMPORTANTE: volta para ACTIVE
                 self.state.update_peer(
@@ -175,6 +181,8 @@ class PeerTable:
                     info.get("expires_in"),
                     status="ACTIVE"
                 )
+
+                self.state.reset_reconnect(peer_id)
 
                 self.log.info(
                     "[PeerTable] Reconectado a %s",

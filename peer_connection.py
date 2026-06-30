@@ -464,6 +464,9 @@ class PeerConnection:
                                 self.log.debug(f"[Peer_connection] PONG received from: {peer}")
                                 self.peer_states.remove_pending_ping(uuid)
 
+                                self.peer_states.update_peer(peer, status="ACTIVE")
+                                self.peer_states.reset_reconnect(peer)
+
                         elif tipo == "ACK":
                             self.peer_states.remove_pending_ack(recebido.get('msg_id'))
                             self.log.debug(f"[Peer_connection] ACK received from {peer}")
