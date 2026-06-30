@@ -61,13 +61,21 @@ class Keep_Alive():
             present_peers = States.get_all_peers()
 
             #todos os peers que não responderam ao ultimo ping viram stale
-            for stale in States.get_pending_ping_peers():
-                peer = stale[0]
-                msg_id = stale[1]
-                if States.get_peer_info(peer).get('status') == "ACTIVE":
-                    self.log.debug(f"[Keep_Alive] {stale} did not respond to the last ping, setting as stale")
+            pending = States.get_pending_ping_peers()
+
+            for msg_id, info in pending.items():
+
+                peer = info[0]
+
+                if States.get_peer_info(peer).get("status") == "ACTIVE":
+
+                    self.log.debug(
+                        f"[Keep_Alive] {peer} did not respond to the last ping"
+                    )
+
                     States.remove_pending_ping(msg_id)
-                    States.set_stale(stale)
+
+                    States.set_stale(peer)
 
 
             # Manda ping para todos os peers cada um com um uuid específico

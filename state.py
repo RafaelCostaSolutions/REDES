@@ -341,16 +341,11 @@ class State:
 
             return tempo
         
-    def get_pending_ping_peers(
-            self
-    ):
-        peers_list = []
+    def get_pending_ping_peers(self):
+
         with self.pings_lock:
-            pings = self.pending_pings.keys()
-            for i in pings:
-                peers_list.append(self.pending_pings[i])
-                
-        return peers_list
+
+            return dict(self.pending_pings)
 
     # Auto explicativo!
     def remove_pending_ping(
