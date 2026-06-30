@@ -76,15 +76,25 @@ class PeerTable:
                 peer_id
             )
 
-            if not self.state.get_peer(peer_id):
+            info = self.state.get_peer(peer_id)
+
+            if info is None:
 
                 self.state.update_peer(
                     peer_id,
                     peer["ip"],
                     peer["port"],
-                    peer.get(
-                        "expires_in"
-                    ),
+                    peer.get("expires_in"),
+                    status="ACTIVE"
+                )
+
+            else:
+
+                self.state.update_peer(
+                    peer_id,
+                    peer["ip"],
+                    peer["port"],
+                    peer.get("expires_in"),
                     status="ACTIVE"
                 )
 
