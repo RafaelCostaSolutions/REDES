@@ -153,22 +153,24 @@ class PeerTable:
             try:
 
 
-                con = self.peer_connection.Connect_Out(
+                success = self.peer_connection.Connect_Out(
                     peer_id,
                     info["ip"],
                     info["port"]
                 )
 
-                if con:
+                if success:
+
+                    self.state.reset_reconnect(peer_id)
+
                     self.log.info(
-                        "[PeerTable] "
-                        "Conectado a %s",
+                        "[PeerTable] Reconectado a %s",
                         peer_id
                     )
 
-                self.state.reset_reconnect(
-                    peer_id
-                )
+                else:
+
+                    self.state.register_failed_attempt(peer_id)
 
             # Caso a conexão falhar,da o aviso pelo log e registra (para aumentar o tempo do backoff exponencial)
             except Exception as error:
@@ -227,8 +229,6 @@ class PeerTable:
                 reconnect
             )
 
-            if reconnect is None:
-                continue
             if reconnect is None:
                 continue
 
