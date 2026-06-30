@@ -77,6 +77,8 @@ class Keep_Alive():
 
                     States.set_stale(peer)
 
+                    States.register_failed_attempt(peer)
+
 
             # Manda ping para todos os peers cada um com um uuid específico
             for i in present_peers:

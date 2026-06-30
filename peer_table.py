@@ -198,7 +198,14 @@ class PeerTable:
         for (
             peer_id,
             info
-        ) in peers.items():           
+        ) in peers.items():   
+
+            self.log.debug(
+                "Peer=%s status=%s reconnect=%s",
+                peer_id,
+                info["status"],
+                self.state.get_reconnect_info(peer_id)
+            )        
 
             # Aqui, é verificado se houve pelo menos uma tentiva de reconexão. Se não houver, pula o peer. Mas se houver tenta fazer a reconexão.
             reconnect = (
@@ -208,6 +215,20 @@ class PeerTable:
                 )
             )
 
+
+            if info["status"] != "STALE":
+                continue
+
+            reconnect = self.state.get_reconnect_info(peer_id)
+
+            self.log.debug(
+                "STALE %s reconnect=%s",
+                peer_id,
+                reconnect
+            )
+
+            if reconnect is None:
+                continue
             if reconnect is None:
                 continue
 
