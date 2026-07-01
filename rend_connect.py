@@ -134,6 +134,7 @@ class RendServer:
         return
 
     #Função utilisada para enviar as mensagens ao servidor
+    #Os formatos das mensagens já são validados pela validação do config.json
     def _sender(self, msg_in):
         self.log.debug(f"[RDV] Sending to server: {msg_in}")
         msg = json.dumps(msg_in) + "\n"

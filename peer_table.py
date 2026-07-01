@@ -125,11 +125,6 @@ class PeerTable:
 
                 self.state.reset_reconnect(peer_id)
 
-                self.log.info(
-                    "[PeerTable] Conectado a %s",
-                    peer_id
-                )
-
             else:
 
                 self.state.register_failed_attempt(peer_id)
@@ -150,9 +145,20 @@ class PeerTable:
             if reconnect is None:
                 continue
 
-            attempts = reconnect["attempts"]
+            attempts = reconnect["attempts"] + 1
 
-            if attempts >= self.state.max_reconnect_attempts:
+            if [attempts] == self.state.max_reconnect_attempts:
+
+                self.log.debug(
+                "Máximo de tentativas alcançadas de %s",
+                peer_id
+                )
+
+                self.state.remove_rtt(peer_id)
+                self.state.register_failed_attempt(peer_id)
+                continue
+
+            if attempts > self.state.max_reconnect_attempts:
                 continue
 
             if time.monotonic() < reconnect["next_retry"]:

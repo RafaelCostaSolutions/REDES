@@ -160,16 +160,38 @@ class P2PClient:
         return self.state.get_all_connections()
     
     def show_all_connections(self):
+
         with self.state.connections_lock:
             if not self.state.connections:
                 return "Nenhuma conexão ativa."
 
+            outbound = []
+            inbound = []
             linhas = []
 
+            outbound.append(f"Conexões Outbound:")
+            inbound.append(f"Conexões Inbound:")
+
             for peer_id, info in self.state.connections.items():
-                linhas.append(
-                    f"{peer_id} | {info['direction']}"
-                )
+                direction = info['direction']
+                if direction == "OUTBOUND":
+                    outbound.append(
+                        f"  {peer_id} | {direction}"
+                    )
+
+                else:
+                    inbound.append(
+                        f"  {peer_id} | {direction}"
+                    )
+
+            if len(outbound) == 1:
+                outbound.append(f" -Nenhuma conexão outbound")
+
+            if len(inbound) == 1:
+                 inbound.append(f" -Nenhuma conexão inbound")
+
+
+            linhas = outbound + inbound
 
             return "\n".join(linhas)
 

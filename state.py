@@ -261,58 +261,7 @@ class State:
             return dict(
                 self.connections
             )
-        
-    # Retorna todas as conexões inbound
-    def get_inbound_connections(
-    self
-    ):
 
-        with self.connections_lock:
-
-            return {
-
-                peer_id: info
-
-                for (
-                    peer_id,
-                    info
-                )
-
-                in self.connections.items()
-
-                if (
-                    info["direction"]
-                    ==
-                    "INBOUND"
-                )
-
-            }
-        
-    # Retorna todas as conexões outbound
-    def get_outbound_connections(
-        self
-    ):
-
-        with self.connections_lock:
-
-            return {
-
-                peer_id: info
-
-                for (
-                    peer_id,
-                    info
-                )
-
-                in self.connections.items()
-
-                if (
-                    info["direction"]
-                    ==
-                    "OUTBOUND"
-                )
-
-            }
 
 
     # Auto explicativo!
@@ -447,6 +396,14 @@ class State:
             return dict(
                 self.rtt
             )
+        
+    def remove_rtt(
+            self,
+            peer_id
+    ):
+        
+        with self.rtt_lock:
+            return self.rtt.pop(peer_id, None)
 
         
 

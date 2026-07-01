@@ -11,9 +11,6 @@ Resumo resumido:
 - enviar SEND;
 - enviar PUB;
 - enviar ACK;
-- receber SEND;
-- receber PUB;
-- receber ACK;
 - controlar timeout de ACK (5s);
 """
 
@@ -122,59 +119,6 @@ class MessageRouter:
             )
 
     # Auto Explicativo!
-    def send_ack(
-        self,
-        peer_id,
-        msg_id
-    ):
-
-        msg = {
-
-            "type": "ACK",
-
-            "msg_id": msg_id,
-
-            "timestamp": time.monotonic(),
-
-            "ttl": 1
-        }
-
-        self.peer_connection.Sender(msg, peer_id)
-
-    # Auto Explicativo!
-    def process_ack(
-        self,
-        msg
-    ):
-
-        msg_id = msg.get("msg_id")
-
-        self.state.remove_pending_ack(msg_id)
-
-        self.log.debug("ACK recebido (%s)", msg_id)
-
-    # Auto Explicativo!
-    def process_send(
-        self,
-        msg
-    ):
-
-        src = msg.get("src", "unknown")
-
-        payload = msg.get("payload", "")
-
-        print(
-            f"\n[{src}] {payload}"
-        )
-
-        if msg.get("require_ack", False):
-
-            self.send_ack(
-                src,
-                msg.get("msg_id")
-            )
-
-    # Auto Explicativo!
     def publish(
         self,
         dst,
@@ -277,5 +221,5 @@ class MessageRouter:
         payload = msg.get("payload", "")
 
         print(
-            f"\n[PUB {src}] {payload}"
+            f"\n[PUB] {src}: {payload}"
         )

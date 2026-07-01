@@ -123,7 +123,7 @@ class PeerConnection:
                     peer_socket.close()
                     continue
                     
-                self.log.debug(f"[Peer_connection] Connection stabilished with {peer}")
+                self.log.info(f"[Peer_connection] Conectado a {peer} (inbound)")
 
                 #coletando informações e guardando elas
                 self.peer_states.update_peer(peer, addr[0], addr[1]) #updates the state table
@@ -266,6 +266,11 @@ class PeerConnection:
 
                 self.threads_ativas[peer_id] = tr
 
+            self.log.info(
+                    "[Peer_connection] Conectado a %s (outbound)",
+                    peer_id
+                )
+
             return True
 
         except Exception as error:
@@ -318,7 +323,8 @@ class PeerConnection:
 
         sock.close()
         self.peer_states.remove_peer(peer)
-        self.log.debug(f"[Peer_connection] Connection with {peer} ended")
+        self.peer_states.remove_rtt(peer)
+        self.log.info(f"[Peer_connection] Connection with {peer} ended")
 
 
     #Disconecta de todos os peers possíveis
@@ -436,13 +442,21 @@ class PeerConnection:
                                 pass
 
                         elif tipo == "SEND":
-                            self.log.info(f"[MSG] {peer}: {recebido.get('payload')}")
+                            print(f"[MSG] {peer}: {recebido.get('payload')}")
+
+                            #também adiciona ao debug para logs
+                            self.log.debug(f"[MSG] {peer}: {recebido.get('payload')}")
+
                             if recebido.get('require_ack'):
                                 msg = {'type':"ACK", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
                                 self.Sender(msg, peer)
 
                         elif tipo == "PUB":
-                            self.log.info(f"[MSG] {peer}: {recebido.get('payload')}")
+                            print(f"[PUB] {peer}: {recebido.get('payload')}")
+
+                            #também adiciona ao debug para logs
+                            self.log.debug(f"[MSG] {peer}: {recebido.get('payload')}")
+
                             if recebido.get('require_ack'):
                                 msg = {'type':"ACK", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
                                 self.Sender(msg, peer)
@@ -524,7 +538,6 @@ class PeerConnection:
 
         #{msg.encode()!r} usado para ter exatamente o que esta sendo mandado
         self.log.debug(f"[Peer_connection] Sending message: {msg.encode()!r} to {peer_id}")
-
 
         with self.senders_locks_lock:
             lock = self.senders_locks.get(peer_id)
