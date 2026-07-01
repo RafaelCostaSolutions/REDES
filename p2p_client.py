@@ -119,7 +119,8 @@ class P2PClient:
             time.sleep(interval)
 
     def send_message(self, peer_id, text):
-        return self.router.send_message(peer_id, text)
+        need_ack = self.config.get("required_ack")
+        return self.router.send_message(peer_id, text, need_ack)
 
     def publish(self, dst, text):
         return self.router.publish(dst, text)

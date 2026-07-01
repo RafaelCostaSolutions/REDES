@@ -51,8 +51,12 @@ class RendServer:
         if resposta.get('status') != "OK":
             raise Error_Falha_Server("[RDV] Type of message received is missmatched in register")
         
+        my_ip = resposta.get("ip")
+        my_port =  resposta.get("port")
+        
         
         self.log.info(f"[RDV] Sucesso em se registrar como {name}@{namespace} por {ttl}s")
+        self.log.info(f"[RDV] Ip e porta associados ao server: {my_ip}:{my_port}")
         self.log.debug(f"[RDV] Iniciando processo de auto reconnect")
         
         self.auto_reregister = threading.Thread(target=self._reconect, args=[namespace, name, listen_port, ttl], daemon=True) #daemon garante que caso o programa se encerre a thread também feche

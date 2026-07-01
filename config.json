@@ -6,6 +6,7 @@
     "discover_interval": 30,
     "keepalive_interval": 30,
     "max_reconnect_attempts": 5,
+    "required_ack": true,
     "rdv_ttl": 7200,
     "features": ["ack"],
     "log_level": "INFO",

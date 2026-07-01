@@ -63,6 +63,10 @@ class Keep_Alive():
             #todos os peers que não responderam ao ultimo ping viram stale
             pending = States.get_pending_ping_peers()
 
+            #Não deveria retornar None, porém para via das duvidas
+            if pending is None:
+                continue
+
             for msg_id, info in pending.items():
 
                 peer = info[0]
