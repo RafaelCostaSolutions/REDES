@@ -73,7 +73,6 @@ class PeerTable:
 
             else:
 
-                # 🔥 IMPORTANTE:
                 # NÃO sobrescreve status existente
                 self.state.update_peer(
                     peer_id,
@@ -126,8 +125,7 @@ class PeerTable:
                 self.state.reset_reconnect(peer_id)
 
             else:
-
-                self.state.register_failed_attempt(peer_id)
+                self.state.set_stale(peer_id)
 
 
     # Tenta fazer conexão apenas dos peers STALE
@@ -145,11 +143,17 @@ class PeerTable:
             if reconnect is None:
                 continue
 
-            attempts = reconnect["attempts"] + 1
+            if time.monotonic() < reconnect["next_retry"]:
+                continue
+
+            attempts = reconnect["attempts"]
+
+            if attempts > self.state.max_reconnect_attempts:
+                continue
 
             if [attempts] == self.state.max_reconnect_attempts:
 
-                self.log.debug(
+                self.log.info(
                 "Máximo de tentativas alcançadas de %s",
                 peer_id
                 )
@@ -158,16 +162,11 @@ class PeerTable:
                 self.state.register_failed_attempt(peer_id)
                 continue
 
-            if attempts > self.state.max_reconnect_attempts:
-                continue
-
-            if time.monotonic() < reconnect["next_retry"]:
-                continue
 
             self.log.debug(
                 "Tentando reconexão de %s (tentativa %s)",
                 peer_id,
-                attempts
+                attempts + 1
             )
 
             success = self.peer_connection.Connect_Out(
@@ -195,5 +194,4 @@ class PeerTable:
                 )
 
             else:
-
                 self.state.register_failed_attempt(peer_id)

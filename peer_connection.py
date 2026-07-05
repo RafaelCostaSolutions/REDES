@@ -291,8 +291,6 @@ class PeerConnection:
 
                 self.peer_states.remove_connection(peer_id)
 
-            self.peer_states.set_stale(peer_id)
-
             if sock is not None:
 
                 try:
@@ -519,14 +517,14 @@ class PeerConnection:
                     else:
                         break
             
-            #erros inesperados, nesse caso foi escolhido que o peer seria completamente apagado, paar se tentar novamente em um futuro discover
+            #erros inesperados, nesse caso foi escolhido que o peer seria colcoado como stale
             except Exception as e:
                 self.log.warning(f"[Peer_connection] Erro: {e}")
                 self.log.debug(f"[Peer_connection] Ending connection with {peer}")
                 self.peer_states.remove_connection(peer)
                 with self.senders_locks_lock:
                     self.senders_locks.pop(peer, None)
-                self.peer_states.remove_peer(peer)
+                self.peer_states.set_stale(peer)
                 break
 
 

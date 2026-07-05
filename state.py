@@ -173,6 +173,8 @@ class State:
 
             if peer_id in self.peers:
                 self.peers[peer_id]["status"] = "STALE"
+        
+        self.register_failed_attempt(peer_id)
 
     def set_active(self, peer_id):
         with self.peers_lock:
@@ -421,14 +423,15 @@ class State:
             if info is None:
                 info = {"attempts": 0}
 
-            info["attempts"] += 1
 
             delay = (
                 2 **
                 (
-                    info["attempts"] - 1
+                    info["attempts"]
                 )
             )
+            
+            info["attempts"] += 1
 
             now = time.monotonic()
 
@@ -439,7 +442,7 @@ class State:
 
             self.reconnect_info[peer_id] = info
 
-            print(f"[BACKOFF] peer={peer_id} attempts={info['attempts']} next_retry={info['next_retry'] - now}")
+            print(f"[BACKOFF] peer={peer_id} attempts={info['attempts']} next_retry={info['next_retry'] - now}s")
 
 
     # Faz consulta do numero de tentativas e o momento que uma nova tentiva é permitida
