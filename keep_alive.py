@@ -10,6 +10,7 @@ Keep_Alive - Responsável por mandar pings para os peers periodicamente
 import logging
 import threading
 from uuid import uuid4
+import time
 from datetime import datetime, timezone
 
 from peer_connection import PeerConnection
@@ -52,45 +53,75 @@ class Keep_Alive():
         
     
     def _run(self):
+
         States = self.peer_states
         peer_serv = self.peer_conn
-        intervall = self.intervall
-        ttl = self.ttl
 
         while self.running.is_set():
-            present_peers = States.get_all_peers()
 
-            #todos os peers que não responderam ao ultimo ping viram stale
-            for stale in States.get_pending_ping_peers():
-                peer = stale[0]
-                msg_id = stale[1]
-                if States.get_peer_info(peer).get('status') == "ACTIVE":
-                    self.log.debug(f"[Keep_Alive] {stale} did not respond to the last ping, setting as stale")
-                    States.remove_pending_ping(msg_id)
-                    States.set_stale(stale)
+            pending = States.get_pending_ping_peers()
 
+            #
+            # Verifica timeouts
+            #
+            for msg_id, info in pending.items():
 
-            # Manda ping para todos os peers cada um com um uuid específico
-            for i in present_peers:
-                if self.peer_states.get_connection(i) is None:
+                peer = info[0]
+                sent = info[1]
+
+                if time.monotonic() - sent < self.intervall:
                     continue
 
-                info = States.get_peer_info(i) #informações de cada peer
+                self.log.debug(
+                    "[Keep_Alive] %s did not answer ping",
+                    peer
+                )
 
-                if info.get('status') == "ACTIVE": #só se deve mandar ping para os peers ativos
+                States.remove_pending_ping(msg_id)
+                States.set_stale(peer)
 
-                    if self.running.is_set(): #feito que, caso se use o stop() enquanto há uma varredura de pings, ele não tenha de esperar todo o tempo
-                        unique_uuid = str(uuid4())
+            #
+            # Envia novos pings
+            #
+            present_peers = States.get_all_peers()
 
-                        msg = {"type": "PING","msg_id": unique_uuid,"timestamp": datetime.now(timezone.utc).isoformat(),"ttl": ttl}
+            for peer_id, info in present_peers.items():
 
-                        try:
-                            self.log.debug(f"[Keep_Alive] Sending PING to {i}")
-                            peer_serv.Sender(msg, i)
-                            States.add_pending_ping(unique_uuid, i)
-                            
-                        except Exception as error:
-                            self.log.warning(f"[Keep_Alive] Got {error} when sending ping to {i}")
+                if info["status"] != "ACTIVE":
+                    continue
 
-            if self.wait_time.wait(timeout=intervall): #mesmo motivo de garantir que o stop não fique preso por 5 segundos quando o processo parar
+                if States.get_connection(peer_id) is None:
+                    continue
+
+                msg_id = str(uuid4())
+
+                msg = {
+                    "type": "PING",
+                    "msg_id": msg_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "ttl": self.ttl
+                }
+
+                try:
+
+                    States.add_pending_ping(msg_id, peer_id)
+
+                    self.log.debug(
+                        "[Keep_Alive] Sending PING to %s",
+                        peer_id
+                    )
+
+                    peer_serv.Sender(msg, peer_id)
+
+                except Exception as e:
+
+                    States.remove_pending_ping(msg_id)
+
+                    self.log.warning(
+                        "[Keep_Alive] Error sending ping to %s: %s",
+                        peer_id,
+                        e
+                    )
+
+            if self.wait_time.wait(timeout=self.intervall):
                 break

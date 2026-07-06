@@ -136,15 +136,21 @@ class State:
 
 
     # Peer nao responde? marca ele como STALE
-    def set_stale(
-        self,
-        peer_id
-    ):
+    def set_stale(self, peer_id):
 
         with self.peers_lock:
 
-            if peer_id in self.peers:
-                self.peers[peer_id]["status"] = "STALE"
+            peer = self.peers.get(peer_id)
+
+            if peer is None:
+                return
+
+            if peer["status"] == "STALE":
+                return
+
+            peer["status"] = "STALE"
+
+        self.remove_pending_pings_from_peer(peer_id)
 
 
     # Guarda o socket
@@ -228,6 +234,18 @@ class State:
             return dict(
                 self.connections
             )
+        
+    def remove_connection_if_same(self, peer_id, sock):
+
+        with self.connections_lock:
+
+            conn = self.connections.get(peer_id)
+
+            if conn is None:
+                return
+
+            if conn["socket"] is sock:
+                self.connections.pop(peer_id, None)
         
     # Retorna todas as conexões inbound
     def get_inbound_connections(
@@ -323,34 +341,21 @@ class State:
             self.pending_pings[msg_id] = [peer, time.monotonic()]
     
     # Retorna o tempo em que o ping foi enviado
-    def get_pending_ping_time(
-            self, 
-            msg_id
-    ):
-        
+    def get_pending_ping_time(self, msg_id):
+
         with self.pings_lock:
 
-            tempo = (
-                self.pending_pings.get(
-                    msg_id
-                )[1] 
-            )
+            info = self.pending_pings.get(msg_id)
 
-            if tempo is None:
+            if info is None:
                 return None
 
-            return tempo
+            return info[1]
         
-    def get_pending_ping_peers(
-            self
-    ):
-        peers_list = []
+    def get_pending_ping_peers(self):
+
         with self.pings_lock:
-            pings = self.pending_pings.keys()
-            for i in pings:
-                peers_list.append(self.pending_pings[i])
-                
-        return peers_list
+            return dict(self.pending_pings)
 
     # Auto explicativo!
     def remove_pending_ping(

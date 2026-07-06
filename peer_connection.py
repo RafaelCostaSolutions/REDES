@@ -196,6 +196,25 @@ class PeerConnection:
                 with self.senders_locks_lock:
                     self.senders_locks[peer_id] = threading.Lock()
                     lock_created = True
+
+                old_socket = self.peer_states.get_connection(peer_id)
+
+                if old_socket is not None:
+
+                    try:
+                        old_socket.shutdown(socket.SHUT_RDWR)
+                    except Exception:
+                        pass
+
+                    try:
+                        old_socket.close()
+                    except Exception:
+                        pass
+                    self.peer_states.remove_connection_if_same(
+                        peer_id,
+                        old_socket
+                    )
+
                 self.peer_states.add_connection(peer_id, sock, "OUTBOUND")
                 connection_added = True
                 tr = threading.Thread(target=self._receiver_handler, args=[peer_id]) #Começa o processo de ouvir, igual ao do First_contact
@@ -208,7 +227,10 @@ class PeerConnection:
                 self.log.debug(f"[Peer_connection] Failed to connect with {peer_id}")
                 with self.senders_locks_lock:
                     self.senders_locks.pop(peer_id, None)
-                self.peer_states.remove_connection(peer_id)
+                self.peer_states.remove_connection_if_same(
+                    peer_id,
+                    sock
+                )
                 self.peer_states.set_stale(peer_id)
 
         except Exception as error:
@@ -217,7 +239,10 @@ class PeerConnection:
                 with self.senders_locks_lock:
                     self.senders_locks.pop(peer_id, None)
             if connection_added:
-                self.peer_states.remove_connection(peer_id)
+                self.peer_states.remove_connection_if_same(
+                    peer_id,
+                    sock
+                )
             self.peer_states.set_stale(peer_id)
             if sock is not None:
                 try:
@@ -237,7 +262,7 @@ class PeerConnection:
                        'ttl':self.peer_ttl}
         
         self.Sender(msg_funeral, peer)
-        self.peer_states.remove_connection(peer)
+
 
         with self.thread_ativas_lock:
             self.threads_ativas.pop(peer, None)
@@ -313,124 +338,267 @@ class PeerConnection:
     
     #Escuta cada peer conectado e prepara a resposta necess-aria
     def _receiver_handler(self, peer):
-        connected_scokect: socket = self.peer_states.get_connection(peer)
-        connected_scokect.settimeout(2)
+
+        thread_id = threading.get_ident()
+
+        self.log.debug(
+            "[Receiver] START peer=%s thread=%s",
+            peer,
+            thread_id
+        )
+
+        connected_socket: socket = self.peer_states.get_connection(peer)
+
+        connected_socket.settimeout(2)
+
         max_msg = 32768
 
-        #buffer usado para receber as mensagens,
-        #necessário pois conexão TCP não garabet tudo chegar junto (dmorou para lembrar disso)
         buffer = b""
 
-        while (self.listening.is_set()):
+        info = self.peer_states.get_peer_info(peer)
+
+        while self.listening.is_set():
+
             try:
-                try:
-                    if self.listening.is_set():
-                        part = connected_scokect.recv(32768)
 
-                    else:
+                part = connected_socket.recv(32768)
+
+                if not part:
+                    self.log.debug(
+                        "[Peer_connection] Received malformed msg from %s",
+                        peer
+                    )
+                    break
+
+                buffer += part
+
+                while b"\n" in buffer:
+
+                    recebido, buffer = buffer.split(b"\n", 1)
+
+                    if len(recebido) > max_msg:
+                        self.log.debug(
+                            "[MSG] %s: Exceeded the limit of characters",
+                            peer
+                        )
+                        continue
+
+                    try:
+
+                        recebido = json.loads(
+                            recebido.decode()
+                        )
+
+                        tempo = datetime.now(
+                            timezone.utc
+                        ).isoformat()
+
+                        tipo = recebido.get("type")
+
+                    except json.JSONDecodeError:
+
+                        self.log.debug(
+                            "[Peer_connection] Malformed message from %s",
+                            peer
+                        )
+
+                        continue
+
+                    self.log.debug(
+                        "[Peer_connection] Message received from %s: %s",
+                        peer,
+                        recebido
+                    )
+
+
+                    if tipo == "PING":
+
+                        if self.peer_states.get_connection(peer) is not None:
+
+                            msg = {
+                                "type": "PONG",
+                                "msg_id": recebido.get("msg_id"),
+                                "timestamp": tempo,
+                                "ttl": self.peer_ttl
+                            }
+
+                            self.Sender(msg, peer)
+
+
+                    elif tipo == "SEND":
+
+                        print(f"[MSG] {peer}: {recebido.get('payload')}")
+
+                        self.log.debug(
+                            "[MSG] %s: %s",
+                            peer,
+                            recebido.get("payload")
+                        )
+
+                        if recebido.get("require_ack"):
+
+                            msg = {
+                                "type": "ACK",
+                                "msg_id": recebido.get("msg_id"),
+                                "timestamp": tempo,
+                                "ttl": self.peer_ttl
+                            }
+
+                            self.Sender(msg, peer)
+
+                   
+                    elif tipo == "PUB":
+
+                        print(f"[PUB] {peer}: {recebido.get('payload')}")
+
+                        self.log.debug(
+                            "[PUB] %s: %s",
+                            peer,
+                            recebido.get("payload")
+                        )
+
+                        if recebido.get("require_ack"):
+
+                            msg = {
+                                "type": "ACK",
+                                "msg_id": recebido.get("msg_id"),
+                                "timestamp": tempo,
+                                "ttl": self.peer_ttl
+                            }
+
+                            self.Sender(msg, peer)
+
+                   
+                    elif tipo == "BYE":
+
+                        if self.listening.is_set():
+
+                            self.log.debug(
+                                "[Peer_connection] Asked to close connection from %s, reason: %s",
+                                peer,
+                                recebido.get("reason")
+                            )
+
+                            self._disconnect_inbound(recebido, peer)
+
                         break
-                    
-                    if not part:
-                        self.log.debug(f"[Peer_connection] Received malformed msg from {peer}")
-                        break
 
-                    buffer = buffer + part
+                   
 
-                    #quando se tem pelo menso um \n no buffer, quer dizer que pelo menso uma mensagem chegou
-                    while b"\n" in buffer: 
-                        recebido, buffer = buffer.split(b"\n", 1) #passa a mensagem que ja chegou para o recebido, enquanto o resto continua no buffer
+                    elif tipo == "PONG":
 
-                        #checa para ver se esta dentro do limite de tamanho
-                        if len(recebido) > max_msg:
-                            self.log.debug(f"[MSG] {peer}: Exceeded the limit of characters")
-                            continue
+                        uuid = recebido.get("msg_id")
 
-                        try:
-                            recebido = json.loads(recebido.decode())
-                            tempo = datetime.now(timezone.utc).isoformat()
-                            tipo = recebido.get('type')
-                        except json.JSONDecodeError:
-                            self.log.debug(f"[Peer_connection] Malformed message from {peer}")
-                            continue
+                        pong_received = time.monotonic()
 
-                        self.log.debug(f"[Peer_connection] Message received from {peer}: {recebido}")
+                        ping_sent = self.peer_states.get_pending_ping_time(uuid)
 
-                        if tipo == "PING":
-                            if self.peer_states.get_connection(peer) != None: #se a conexão ja foi fechada não se deve mandar o ping de volta
-                                msg = {'type':"PONG", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
-                                self.Sender(msg, peer)
-                            else:
-                                pass
+                        if ping_sent is None:
 
-                        elif tipo == "SEND":
-                            self.log.info(f"[MSG] {peer}: {recebido.get('payload')}")
-                            if recebido.get('require_ack'):
-                                msg = {'type':"ACK", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
-                                self.Sender(msg, peer)
-
-                        elif tipo == "PUB":
-                            self.log.info(f"[MSG] {peer}: {recebido.get('payload')}")
-                            if recebido.get('require_ack'):
-                                msg = {'type':"ACK", 'msg_id':recebido.get('msg_id'), "timestamp":tempo, "ttl":self.peer_ttl}
-                                self.Sender(msg, peer)
-
-                        elif tipo == "BYE":
-                            if self.listening.is_set():
-                                self.log.debug(f"[Peer_connection] Asked to close connection from {peer}, reason: {recebido.get('reason')}")
-                                self._disconnect_inbound(recebido, peer)
-                            return
-
-                        elif tipo == "PONG":
-                            uuid = recebido.get('msg_id')
-                            pong_received = time.monotonic()
-                            ping_sent = self.peer_states.get_pending_ping_time(uuid)
-
-                            if ping_sent is None:
-                                self.log.debug(f"[Peer_connection] PONG without matching PING or with malformation")
-                            else:
-                                rtt = (pong_received - ping_sent) * 1000
-                                self.peer_states.set_rtt(peer, rtt)
-                                self.log.debug(f"[Peer_connection] PONG received from: {peer}")
-                                self.peer_states.remove_pending_ping(uuid)
-
-                        elif tipo == "ACK":
-                            self.peer_states.remove_pending_ack(recebido.get('msg_id'))
-                            self.log.debug(f"[Peer_connection] ACK received from {peer}")
+                            self.log.debug(
+                                "[Peer_connection] PONG without matching PING"
+                            )
 
                         else:
-                            self.log.debug(f"[Peer_connection] Message poorly formated from: {peer}")
 
-                except OSError as error:
+                            rtt = (
+                                pong_received - ping_sent
+                            ) * 1000
 
-                    #erros de timeout são esperados, visto que o recv é fechado a cada 2 segundos para não travar quando fechar
-                    if "timed out" in str(error).lower():
-                        continue
-                    
-                    #erros não esperados de socket devem então ser tratados 
-                    if (self.listening.is_set()):
-                        self.log.warning(f"[Peer_connection] Erro: {error}")
-                        self.log.debug(f"[Peer_connection] Marcando {peer} como stale e retirando sua tag de conexão")
+                            self.peer_states.set_rtt(
+                                peer,
+                                rtt
+                            )
 
-                        #quando tal erro ocorre deve-se marcar o peer como stale para tentar a reconexão
-                        self.peer_states.remove_connection(peer)
-                        self.peer_states.set_stale(peer)
-                        with self.senders_locks_lock:
-                            self.senders_locks.pop(peer, None)
-                        break
+                            self.peer_states.remove_pending_ping(
+                                uuid
+                            )
 
-                    #nesse caso o erro ocorre devido ao disconnect, e não se deve fechar as conexão ainda
-                    else:
-                        break
+                            self.peer_states.update_peer(
+                                peer,
+                                info["ip"],
+                                info["port"],
+                                info.get("expires_in"),
+                                status="ACTIVE"
+                            )
+
+                            self.peer_states.reset_reconnect(peer)
+
+                            self.log.debug(
+                                "[Peer_connection] PONG received from %s",
+                                peer
+                            )
+
             
-            #erros inesperados, nesse caso foi escolhido que o peer seria completamente apagado, paar se tentar novamente em um futuro discover
-            except Exception as e:
-                self.log.warning(f"[Peer_connection] Erro: {e}")
-                self.log.debug(f"[Peer_connection] Ending connection with {peer}")
-                self.peer_states.remove_connection(peer)
-                with self.senders_locks_lock:
-                    self.senders_locks.pop(peer, None)
-                self.peer_states.remove_peer(peer)
+
+                    elif tipo == "ACK":
+
+                        self.peer_states.remove_pending_ack(
+                            recebido.get("msg_id")
+                        )
+
+                        self.log.debug(
+                            "[Peer_connection] ACK received from %s",
+                            peer
+                        )
+
+            
+
+                    else:
+
+                        self.log.debug(
+                            "[Peer_connection] Message poorly formatted from %s",
+                            peer
+                        )
+
+            except OSError as error:
+
+                if "timed out" in str(error).lower():
+                    continue
+
+                if self.listening.is_set():
+
+                    self.log.warning(
+                        "[Peer_connection] Erro: %s",
+                        error
+                    )
+
+                    self.log.debug(
+                        "[Peer_connection] Marcando %s como stale",
+                        peer
+                    )
+
+                    self.peer_states.set_stale(peer)
+
                 break
+
+            except Exception as e:
+
+                self.log.warning(
+                    "[Peer_connection] Erro: %s",
+                    e
+                )
+
+                self.peer_states.set_stale(peer)
+
+                break
+
+    
+
+        with self.senders_locks_lock:
+            self.senders_locks.pop(peer, None)
+
+        self.peer_states.remove_connection_if_same(
+            peer,
+            connected_socket
+        )
+
+        self.log.debug(
+            "[Receiver] END peer=%s thread=%s",
+            peer,
+            thread_id
+        )
+        
 
 
 
@@ -468,13 +636,17 @@ class PeerConnection:
                 if isinstance(erro, (BrokenPipeError, ConnectionResetError)):
                     self.log.warning(f"[Peer_connection] Problem when sending messages to {peer_id}")
 
-                    self.peer_states.remove_connection(peer_id)
                     self.peer_states.set_stale(peer_id)
 
                     with self.senders_locks_lock:
                         self.senders_locks.pop(peer_id, None)
 
                     if sock:
+                        try:
+                            sock.shutdown(socket.SHUT_RDWR)
+                        except Exception:
+                            pass
+
                         try:
                             sock.close()
                         except Exception:

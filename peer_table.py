@@ -1,5 +1,6 @@
 import logging
 import time
+import threading
 
 
 """
@@ -41,6 +42,8 @@ class PeerTable:
                 "PeerTable"
             )
         )
+        self.connecting_peers = set()
+        self.connecting_lock = threading.Lock()
 
     # Usa o DISCOVER para atualizar a lista de peers
     def refresh_peers(
@@ -225,11 +228,21 @@ class PeerTable:
 
             try:
                 self.log.debug(f"Tentando reconexão de {peer_id}, tentativa: {attempts}")
-                self.peer_connection.Connect_Out(
+                with self.connecting_lock:
+
+                    if peer_id in self.connecting_peers:
+                        continue
+
+                    self.connecting_peers.add(peer_id)
+                try:
+                    success = self.peer_connection.Connect_Out(
                     peer_id,
                     info["ip"],
                     info["port"]
-                )
+                    )
+                finally:
+                    with self.connecting_lock:
+                        self.connecting_peers.discard(peer_id)
                 
                 # Se a exceção nao for lançada, a reconexão deu certo. Agora só apagar o histórico de tentativas
                 self.state.reset_reconnect(
@@ -254,3 +267,8 @@ class PeerTable:
                 self.state.register_failed_attempt(
                     peer_id
                 )
+
+    def is_connecting(self, peer_id):
+
+        with self.connecting_lock:
+            return peer_id in self.connecting_peers
