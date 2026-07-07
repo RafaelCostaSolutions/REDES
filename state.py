@@ -134,6 +134,18 @@ class State:
         with self.peers_lock:
             self.peers.pop(peer_id, None)
 
+        
+    def set_active(
+            self,
+            peer_id
+    ):
+
+        with self.peers_lock:
+
+            if peer_id in self.peers:
+
+                self.peers[peer_id]["status"] = "ACTIVE"
+
 
     # Peer nao responde? marca ele como STALE
     def set_stale(self, peer_id):
