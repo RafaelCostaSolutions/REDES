@@ -61,7 +61,7 @@ class State:
         self.pending_acks = {}
         self.acks_lock = threading.Lock()
 
-        self.pending_pings = {}
+        self.pending_ping = {}
         self.pings_lock = threading.Lock()
 
         self.rtt = {}
@@ -338,14 +338,14 @@ class State:
     ):
 
         with self.pings_lock:
-            self.pending_pings[msg_id] = [peer, time.monotonic()]
+            self.pending_ping[msg_id] = [peer, time.monotonic()]
     
     # Retorna o tempo em que o ping foi enviado
     def get_pending_ping_time(self, msg_id):
 
         with self.pings_lock:
 
-            info = self.pending_pings.get(msg_id)
+            info = self.pending_ping.get(msg_id)
 
             if info is None:
                 return None
@@ -355,12 +355,12 @@ class State:
     def get_pending_ping_peers(self):
 
         with self.pings_lock:
-            return dict(self.pending_pings)
+            return self.pending_ping.copy()
 
 
     def remove_pending_ping_peer(self, peer_id):
 
-        with self.lock:
+        with self.pings_lock:
 
             remove = []
 
@@ -379,7 +379,7 @@ class State:
     ):
 
         with self.pings_lock:
-            self.pending_pings.pop(msg_id, None)
+            self.pending_ping.pop(msg_id, None)
 
     # Auto explicativo!
     def set_rtt(

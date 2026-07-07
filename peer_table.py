@@ -77,7 +77,7 @@ class PeerTable:
 
             if self.state.get_peer(peer_id):
 
-                self.state.refresh_peer(
+                self.state.update_peer(
                     peer_id,
                     peer["ip"],
                     peer["port"],

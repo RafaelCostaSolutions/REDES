@@ -59,8 +59,8 @@ class Keep_Alive():
 
         while self.running.is_set():
 
-            pending = list(
-                States.get_pending_ping_peers().items()
+            pending = (
+                States.get_pending_ping_peers()
             )
 
 
@@ -86,9 +86,7 @@ class Keep_Alive():
             #
             # Envia novos pings
             #
-            present_peers = list(
-                States.get_all_peers().items()
-            )
+            present_peers = States.get_all_peers()
 
             for peer_id, info in present_peers.items():
 
