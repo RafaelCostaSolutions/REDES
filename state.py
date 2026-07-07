@@ -150,7 +150,7 @@ class State:
 
             peer["status"] = "STALE"
 
-        self.remove_pending_pings_from_peer(peer_id)
+        self.remove_pending_ping(peer_id)
 
 
     # Guarda o socket
