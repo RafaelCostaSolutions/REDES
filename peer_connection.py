@@ -187,7 +187,16 @@ class PeerConnection:
             msg = json.dumps(msg) + "\n"
             sock.send(msg.encode())
             sock.settimeout(5.0)
-            resposta = json.loads(sock.recv(1024).decode())
+            data = sock.recv(1024)
+            if not data:
+                raise ConnectionError(
+                    "Peer closed connection during handshake"
+                )
+
+
+            resposta = json.loads(
+                data.decode()
+            )
             self.log.debug(f"[Peer_connection] Connection outbound - Sent to: {peer_id}")
             tipo = resposta.get('type')
 
@@ -588,10 +597,13 @@ class PeerConnection:
         with self.senders_locks_lock:
             self.senders_locks.pop(peer, None)
 
-        self.peer_states.remove_connection_if_same(
+        removed = self.peer_states.remove_connection_if_same(
             peer,
             connected_socket
         )
+
+        if removed:
+            self.peer_states.set_stale(peer)
 
         self.log.debug(
             "[Receiver] END peer=%s thread=%s",

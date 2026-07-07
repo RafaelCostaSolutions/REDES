@@ -357,6 +357,21 @@ class State:
         with self.pings_lock:
             return dict(self.pending_pings)
 
+
+    def remove_pending_ping_peer(self, peer_id):
+
+        with self.lock:
+
+            remove = []
+
+            for msg_id, info in self.pending_ping.items():
+
+                if info[0] == peer_id:
+                    remove.append(msg_id)
+
+
+            for msg_id in remove:
+                del self.pending_ping[msg_id]
     # Auto explicativo!
     def remove_pending_ping(
         self,

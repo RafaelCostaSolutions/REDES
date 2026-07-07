@@ -55,11 +55,10 @@ class PeerTable:
             self.rend_server.decoberta(
                 namespace
             )
-        )   
+        )
 
         current_peers = set()
 
-        # Para cada peer descoberto, vai-se atualizar as informacoes de cada peer e marcar como stale os que nao foram descobertos no discover atual
 
         for peer in discovered:
 
@@ -68,28 +67,37 @@ class PeerTable:
                 f"{peer['namespace']}"
             )
 
-            if (
-                peer_id
-                ==
-                self.state.peer_id
-            ):
+
+            if peer_id == self.state.peer_id:
                 continue
 
-            current_peers.add(
-                peer_id
-            )
 
-            if not self.state.get_peer(peer_id):
+            current_peers.add(peer_id)
 
+
+            if self.state.get_peer(peer_id):
+
+                self.state.refresh_peer(
+                    peer_id,
+                    peer["ip"],
+                    peer["port"],
+                    peer.get("expires_in")
+                )
+
+
+            else:
+
+                # Não coloca ACTIVE aqui.
+                # Só descobriu, ainda não conectou.
                 self.state.update_peer(
                     peer_id,
                     peer["ip"],
                     peer["port"],
-                    peer.get(
-                        "expires_in"
-                    ),
-                    status="ACTIVE"
+                    peer.get("expires_in"),
+                    status="STALE"
                 )
+
+
 
         known_peers = (
             self.state.get_all_peers()
@@ -98,11 +106,11 @@ class PeerTable:
 
         for peer_id in known_peers:
 
-            if (
-                peer_id
-                not in current_peers
-            ):
-                self.log.debug(f"[peer_table] Marcando {peer_id} como stale")
+            if peer_id not in current_peers:
+
+                self.log.debug(
+                    f"[peer_table] Marcando {peer_id} como stale"
+                )
 
                 self.state.set_stale(
                     peer_id
@@ -117,30 +125,41 @@ class PeerTable:
             self.state.get_all_peers()
         )
 
+
         for (
             peer_id,
             info
         ) in peers.items():
 
-            if (
-                info["status"]
-                !=
-                "ACTIVE"
-            ):
+
+            if info["status"] != "ACTIVE":
                 continue
 
+
             existing = (
-                self.state
-                .get_connection(
+                self.state.get_connection(
                     peer_id
                 )
             )
 
+
             if existing:
                 continue
 
-            try:
 
+
+            # Impede duas threads conectando no mesmo peer
+            with self.connecting_lock:
+
+                if peer_id in self.connecting_peers:
+                    continue
+
+                self.connecting_peers.add(
+                    peer_id
+                )
+
+
+            try:
 
                 con = self.peer_connection.Connect_Out(
                     peer_id,
@@ -148,19 +167,36 @@ class PeerTable:
                     info["port"]
                 )
 
+
                 if con:
-                    self.log.info(
-                        "[PeerTable] "
-                        "Conectado a %s",
+
+                    # Agora sim ele está conectado
+                    self.state.set_active(
                         peer_id
                     )
 
-                self.state.reset_reconnect(
-                    peer_id
-                )
 
-            # Caso a conexão falhar,da o aviso pelo log e registra (para aumentar o tempo do backoff exponencial)
+                    self.state.reset_reconnect(
+                        peer_id
+                    )
+
+
+                    self.log.info(
+                        "[PeerTable] Conectado a %s",
+                        peer_id
+                    )
+
+
+                else:
+
+                    self.state.register_failed_attempt(
+                        peer_id
+                    )
+
+
+
             except Exception as error:
+
 
                 self.log.warning(
                     "[PeerTable] "
@@ -170,9 +206,20 @@ class PeerTable:
                     error
                 )
 
+
                 self.state.register_failed_attempt(
                     peer_id
                 )
+
+
+            finally:
+
+                # Libera para futuras tentativas
+                with self.connecting_lock:
+
+                    self.connecting_peers.discard(
+                        peer_id
+                    )
 
 
     # Tenta fazer conexão apenas dos peers STALE
@@ -236,18 +283,20 @@ class PeerTable:
                     self.connecting_peers.add(peer_id)
                 try:
                     success = self.peer_connection.Connect_Out(
-                    peer_id,
-                    info["ip"],
-                    info["port"]
+                        peer_id,
+                        info["ip"],
+                        info["port"]
                     )
+
+                    if success:
+                        self.state.set_active(peer_id)
+                        self.state.reset_reconnect(peer_id)
+                    else:
+                        self.state.register_failed_attempt(peer_id)
                 finally:
                     with self.connecting_lock:
                         self.connecting_peers.discard(peer_id)
-                
-                # Se a exceção nao for lançada, a reconexão deu certo. Agora só apagar o histórico de tentativas
-                self.state.reset_reconnect(
-                    peer_id
-                )
+
 
                 self.log.info(
                     "[PeerTable] "

@@ -59,7 +59,10 @@ class Keep_Alive():
 
         while self.running.is_set():
 
-            pending = States.get_pending_ping_peers()
+            pending = list(
+                States.get_pending_ping_peers().items()
+            )
+
 
             #
             # Verifica timeouts
@@ -83,7 +86,9 @@ class Keep_Alive():
             #
             # Envia novos pings
             #
-            present_peers = States.get_all_peers()
+            present_peers = list(
+                States.get_all_peers().items()
+            )
 
             for peer_id, info in present_peers.items():
 
@@ -111,7 +116,13 @@ class Keep_Alive():
                         peer_id
                     )
 
-                    peer_serv.Sender(msg, peer_id)
+                    ok = peer_serv.Sender(msg, peer_id)
+
+                    if not ok:
+
+                        States.remove_pending_ping(msg_id)
+
+                        States.set_stale(peer_id)
 
                 except Exception as e:
 
