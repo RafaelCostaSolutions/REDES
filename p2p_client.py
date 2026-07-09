@@ -94,12 +94,20 @@ class P2PClient:
         )
 
 
-        # Essa thread é usada para conexões, discovery e reconexão
+        # Essa thread é usada para conexões, discovery.
         self.worker_thread = threading.Thread(
             target=self._network_loop,
             daemon=True
         )
+
+        # Essa thread é usada para reconexão de peers STALE
+        self.reconnect_thread = threading.Thread(
+            target=self._reconnect_loop,
+            daemon=True
+        )
+
         self.worker_thread.start()
+        self.reconnect_thread.start()
 
         self.log.info("P2PClient Iniciou")
 
@@ -112,14 +120,29 @@ class P2PClient:
             try:
                 self.peer_table.refresh_peers()
                 self.peer_table.connect_new_peers()
-                self.peer_table.reconnect_stale_peers()
             except Exception as e:
                 self.log.warning("Erro no loop de rede: %s", e)
 
             time.sleep(interval)
 
+    def _reconnect_loop(self):
+
+        while self.running.is_set():
+
+            try:
+                self.peer_table.reconnect_stale_peers()
+
+            except Exception as e:
+                self.log.warning(
+                    "Erro no reconnect: %s",
+                    e
+                )
+
+            time.sleep(0.2)
+
     def send_message(self, peer_id, text):
-        return self.router.send_message(peer_id, text)
+        need_ack = self.config.get("required_ack")
+        return self.router.send_message(peer_id, text, need_ack)
 
     def publish(self, dst, text):
         return self.router.publish(dst, text)
@@ -159,16 +182,38 @@ class P2PClient:
         return self.state.get_all_connections()
     
     def show_all_connections(self):
+
         with self.state.connections_lock:
             if not self.state.connections:
                 return "Nenhuma conexão ativa."
 
+            outbound = []
+            inbound = []
             linhas = []
 
+            outbound.append(f"Conexões Outbound:")
+            inbound.append(f"Conexões Inbound:")
+
             for peer_id, info in self.state.connections.items():
-                linhas.append(
-                    f"{peer_id} | {info['direction']}"
-                )
+                direction = info['direction']
+                if direction == "OUTBOUND":
+                    outbound.append(
+                        f"  {peer_id} | {direction}"
+                    )
+
+                else:
+                    inbound.append(
+                        f"  {peer_id} | {direction}"
+                    )
+
+            if len(outbound) == 1:
+                outbound.append(f" -Nenhuma conexão outbound")
+
+            if len(inbound) == 1:
+                 inbound.append(f" -Nenhuma conexão inbound")
+
+
+            linhas = outbound + inbound
 
             return "\n".join(linhas)
 

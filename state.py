@@ -61,7 +61,7 @@ class State:
         self.pending_acks = {}
         self.acks_lock = threading.Lock()
 
-        self.pending_ping = {}
+        self.pending_pings = {}
         self.pings_lock = threading.Lock()
 
         self.rtt = {}
@@ -95,6 +95,34 @@ class State:
                 "expires_in": expires_in,
                 "status": status
             }
+
+    def refresh_peer(
+        self,
+        peer_id,
+        ip,
+        port,
+        expires_in=None
+    ):
+
+        with self.peers_lock:
+
+            if peer_id not in self.peers:
+
+                self.peers[peer_id] = {
+                    "ip": ip,
+                    "port": port,
+                    "expires_in": expires_in,
+                    "status": "ACTIVE"
+                }
+
+                return
+
+            peer = self.peers[peer_id]
+
+            peer["ip"] = ip
+            peer["port"] = port
+            peer["expires_in"] = expires_in
+
 
     # Auto explicativo!
     def get_peer(
@@ -134,35 +162,24 @@ class State:
         with self.peers_lock:
             self.peers.pop(peer_id, None)
 
-        
-    def set_active(
-            self,
-            peer_id
+
+    # Peer nao responde? marca ele como STALE
+    def set_stale(
+        self,
+        peer_id
     ):
 
         with self.peers_lock:
 
             if peer_id in self.peers:
+                self.peers[peer_id]["status"] = "STALE"
+        
+        self.register_failed_attempt(peer_id)
 
-                self.peers[peer_id]["status"] = "ACTIVE"
-
-
-    # Peer nao responde? marca ele como STALE
-    def set_stale(self, peer_id):
-
+    def set_active(self, peer_id):
         with self.peers_lock:
-
-            peer = self.peers.get(peer_id)
-
-            if peer is None:
-                return
-
-            if peer["status"] == "STALE":
-                return
-
-            peer["status"] = "STALE"
-
-        self.remove_pending_ping(peer_id)
+            if peer_id in self.peers:
+                self.peers[peer_id]["status"] = "ACTIVE"
 
 
     # Guarda o socket
@@ -246,70 +263,7 @@ class State:
             return dict(
                 self.connections
             )
-        
-    def remove_connection_if_same(self, peer_id, sock):
 
-        with self.connections_lock:
-
-            conn = self.connections.get(peer_id)
-
-            if conn is None:
-                return
-
-            if conn["socket"] is sock:
-                self.connections.pop(peer_id, None)
-        
-    # Retorna todas as conexões inbound
-    def get_inbound_connections(
-    self
-    ):
-
-        with self.connections_lock:
-
-            return {
-
-                peer_id: info
-
-                for (
-                    peer_id,
-                    info
-                )
-
-                in self.connections.items()
-
-                if (
-                    info["direction"]
-                    ==
-                    "INBOUND"
-                )
-
-            }
-        
-    # Retorna todas as conexões outbound
-    def get_outbound_connections(
-        self
-    ):
-
-        with self.connections_lock:
-
-            return {
-
-                peer_id: info
-
-                for (
-                    peer_id,
-                    info
-                )
-
-                in self.connections.items()
-
-                if (
-                    info["direction"]
-                    ==
-                    "OUTBOUND"
-                )
-
-            }
 
 
     # Auto explicativo!
@@ -350,40 +304,33 @@ class State:
     ):
 
         with self.pings_lock:
-            self.pending_ping[msg_id] = [peer, time.monotonic()]
+            self.pending_pings[msg_id] = [peer, time.monotonic()]
     
     # Retorna o tempo em que o ping foi enviado
-    def get_pending_ping_time(self, msg_id):
-
+    def get_pending_ping_time(
+            self, 
+            msg_id
+    ):
+        
         with self.pings_lock:
 
-            info = self.pending_ping.get(msg_id)
+            tempo = (
+                self.pending_pings.get(
+                    msg_id
+                )[1] 
+            )
 
-            if info is None:
+            if tempo is None:
                 return None
 
-            return info[1]
+            return tempo
         
     def get_pending_ping_peers(self):
 
         with self.pings_lock:
-            return self.pending_ping.copy()
 
+            return dict(self.pending_pings)
 
-    def remove_pending_ping_peer(self, peer_id):
-
-        with self.pings_lock:
-
-            remove = []
-
-            for msg_id, info in self.pending_ping.items():
-
-                if info[0] == peer_id:
-                    remove.append(msg_id)
-
-
-            for msg_id in remove:
-                del self.pending_ping[msg_id]
     # Auto explicativo!
     def remove_pending_ping(
         self,
@@ -391,7 +338,7 @@ class State:
     ):
 
         with self.pings_lock:
-            self.pending_ping.pop(msg_id, None)
+            self.pending_pings.pop(msg_id, None)
 
     # Auto explicativo!
     def set_rtt(
@@ -451,6 +398,14 @@ class State:
             return dict(
                 self.rtt
             )
+        
+    def remove_rtt(
+            self,
+            peer_id
+    ):
+        
+        with self.rtt_lock:
+            return self.rtt.pop(peer_id, None)
 
         
 
@@ -468,21 +423,29 @@ class State:
             if info is None:
                 info = {"attempts": 0}
 
-            info["attempts"] += 1
+            if(info["attempts"] < self.max_reconnect_attempts):
 
-            delay = (
-                2 **
-                (
-                    info["attempts"] - 1
+                delay = (
+                    2 **
+                    (
+                        info["attempts"]
+                    )
                 )
-            )
+                
+                info["attempts"] += 1
 
-            info["next_retry"] = (
-                time.monotonic() +
-                delay
-            )
+                now = time.monotonic()
 
-            self.reconnect_info[peer_id] = info
+                info["next_retry"] = (
+                    now +
+                    delay
+                )
+
+                self.reconnect_info[peer_id] = info
+
+                if(info["attempts"] <= self.max_reconnect_attempts):
+
+                    print(f"[BACKOFF] peer={peer_id} attempts={info['attempts']} next_retry={info['next_retry'] - now}s")
 
 
     # Faz consulta do numero de tentativas e o momento que uma nova tentiva é permitida

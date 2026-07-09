@@ -1,6 +1,5 @@
 import logging
 import time
-import threading
 
 
 """
@@ -42,282 +41,168 @@ class PeerTable:
                 "PeerTable"
             )
         )
-        self.connecting_peers = set()
-        self.connecting_lock = threading.Lock()
 
     # Usa o DISCOVER para atualizar a lista de peers
-    def refresh_peers(
-        self,
-        namespace=None
-    ):
+    def refresh_peers(self, namespace=None):
 
-        discovered = (
-            self.rend_server.decoberta(
-                namespace
-            )
-        )
+        discovered = self.rend_server.decoberta(namespace)
 
         current_peers = set()
 
-
         for peer in discovered:
 
-            peer_id = (
-                f"{peer['name']}@"
-                f"{peer['namespace']}"
-            )
-
+            peer_id = f"{peer['name']}@{peer['namespace']}"
 
             if peer_id == self.state.peer_id:
                 continue
 
-
             current_peers.add(peer_id)
 
+            info = self.state.get_peer(peer_id)
 
-            if self.state.get_peer(peer_id):
+            if info is None:
 
-                self.state.update_peer(
-                    peer_id,
-                    peer["ip"],
-                    peer["port"],
-                    peer.get("expires_in")
-                )
-
-
-            else:
-
-                # Não coloca ACTIVE aqui.
-                # Só descobriu, ainda não conectou.
+                # novo peer → entra como ACTIVE
                 self.state.update_peer(
                     peer_id,
                     peer["ip"],
                     peer["port"],
                     peer.get("expires_in"),
-                    status="STALE"
+                    status="ACTIVE"
                 )
 
+            else:
 
+                # NÃO sobrescreve status existente
+                self.state.update_peer(
+                    peer_id,
+                    peer["ip"],
+                    peer["port"],
+                    peer.get("expires_in"),
+                    status=info["status"]   # mantém STALE ou ACTIVE
+                )
 
-        known_peers = (
-            self.state.get_all_peers()
-        )
-
-
-        for peer_id in known_peers:
+        # remove peers que sumiram do discover
+        for peer_id in list(self.state.get_all_peers().keys()):
 
             if peer_id not in current_peers:
 
                 self.log.debug(
-                    f"[peer_table] Marcando {peer_id} como stale"
-                )
-
-                self.state.set_stale(
+                    "[peer_table] Marcando %s como stale",
                     peer_id
                 )
 
+                self.state.set_stale(peer_id)
+
     # Tenta fazer conexão apenas dos peers ativos
-    def connect_new_peers(
-        self
-    ):
+    def connect_new_peers(self):
 
-        peers = (
-            self.state.get_all_peers()
-        )
+        peers = self.state.get_all_peers()
 
-
-        for (
-            peer_id,
-            info
-        ) in peers.items():
-
+        for peer_id, info in peers.items():
 
             if info["status"] != "ACTIVE":
                 continue
 
-
-            existing = (
-                self.state.get_connection(
-                    peer_id
-                )
-            )
-
-
-            if existing:
+            if self.state.get_connection(peer_id):
                 continue
 
+            success = self.peer_connection.Connect_Out(
+                peer_id,
+                info["ip"],
+                info["port"]
+            )
 
-
-            # Impede duas threads conectando no mesmo peer
-            with self.connecting_lock:
-
-                if peer_id in self.connecting_peers:
-                    continue
-
-                self.connecting_peers.add(
-                    peer_id
-                )
-
-
-            try:
-
-                con = self.peer_connection.Connect_Out(
+            if success:
+                self.state.update_peer(
                     peer_id,
                     info["ip"],
-                    info["port"]
+                    info["port"],
+                    info.get("expires_in"),
+                    status="ACTIVE"
                 )
 
+                self.state.reset_reconnect(peer_id)
 
-                if con:
-
-                    # Agora sim ele está conectado
-                    self.state.set_active(
-                        peer_id
-                    )
-
-
-                    self.state.reset_reconnect(
-                        peer_id
-                    )
-
-
-                    self.log.info(
-                        "[PeerTable] Conectado a %s",
-                        peer_id
-                    )
-
-
-                else:
-
-                    self.state.register_failed_attempt(
-                        peer_id
-                    )
-
-
-
-            except Exception as error:
-
-
-                self.log.warning(
-                    "[PeerTable] "
-                    "Falha ao conectar "
-                    "%s (%s)",
-                    peer_id,
-                    error
-                )
-
-
-                self.state.register_failed_attempt(
-                    peer_id
-                )
-
-
-            finally:
-
-                # Libera para futuras tentativas
-                with self.connecting_lock:
-
-                    self.connecting_peers.discard(
-                        peer_id
-                    )
+            else:
+                self.state.set_stale(peer_id)
 
 
     # Tenta fazer conexão apenas dos peers STALE
-    def reconnect_stale_peers(
-        self
-    ):
+    def reconnect_stale_peers(self):
 
-        peers = (
-            self.state.get_all_peers()
-        )
+        peers = self.state.get_all_peers()
 
-        for (
-            peer_id,
-            info
-        ) in peers.items():           
+        for peer_id, info in peers.items():
 
-            # Aqui, é verificado se houve pelo menos uma tentiva de reconexão. Se não houver, pula o peer. Mas se houver tenta fazer a reconexão.
-            reconnect = (
-                self.state
-                .get_reconnect_info(
-                    peer_id
-                )
-            )
+            if info["status"] != "STALE":
+                continue
+
+            reconnect = self.state.get_reconnect_info(peer_id)
 
             if reconnect is None:
                 continue
 
-            attempts = (
-                reconnect[
-                    "attempts"
-                ]
-            )
-
-            # Se o numero de tentativas de reconexão passar do máximo, pula o peer.
-            if (
-                attempts
-                >=
-                self.state
-                .max_reconnect_attempts
-            ):
+            if time.monotonic() < reconnect["next_retry"]:
                 continue
 
+            attempts = reconnect["attempts"]
 
-            # Verifica se ja deu o tempo de uma nova tentaiva de reconexão.
-            if (
-                time.monotonic()
-                <
-                reconnect[
-                    "next_retry"
-                ]
-            ):
+            if attempts > self.state.max_reconnect_attempts:
                 continue
 
-            try:
-                self.log.debug(f"Tentando reconexão de {peer_id}, tentativa: {attempts}")
-                with self.connecting_lock:
-
-                    if peer_id in self.connecting_peers:
-                        continue
-
-                    self.connecting_peers.add(peer_id)
-                try:
-                    success = self.peer_connection.Connect_Out(
-                        peer_id,
-                        info["ip"],
-                        info["port"]
-                    )
-
-                    if success:
-                        self.state.set_active(peer_id)
-                        self.state.reset_reconnect(peer_id)
-                    else:
-                        self.state.register_failed_attempt(peer_id)
-                finally:
-                    with self.connecting_lock:
-                        self.connecting_peers.discard(peer_id)
-
+            if [attempts] == self.state.max_reconnect_attempts:
 
                 self.log.info(
-                    "[PeerTable] "
-                    "Reconectado a %s",
-                    peer_id
+                "Máximo de tentativas alcançadas de %s",
+                peer_id
                 )
 
-            except Exception:
-                if (attempts == self.state.max_reconnect_attempts):
-                    self.log.warning(
-                    "[PeerTable] "
-                    "Máximo de tentativas "
-                    "atingido para %s",
-                    peer_id
-                )
-                    
-                self.state.register_failed_attempt(
-                    peer_id
+                self.state.remove_rtt(peer_id)
+                self.state.register_failed_attempt(peer_id)
+                continue
+
+
+            self.log.debug(
+                "Tentando reconexão de %s (tentativa %s)",
+                peer_id,
+                attempts + 1
+            )
+
+            success = self.peer_connection.Connect_Out(
+                peer_id,
+                info["ip"],
+                info["port"]
+            )
+
+            if success:
+
+
+                self.state.update_peer(
+                    peer_id,
+                    info["ip"],
+                    info["port"],
+                    info.get("expires_in"),
+                    status="ACTIVE"
                 )
 
-    def is_connecting(self, peer_id):
+                self.state.reset_reconnect(peer_id)
 
-        with self.connecting_lock:
-            return peer_id in self.connecting_peers
+                self.log.info(
+                    "[PeerTable] Reconectado a %s",
+                    peer_id
+                )
+                pending = self.state.get_pending_ping_peers()
+
+                if (pending is None) or (pending == []):
+                    continue
+
+                for msg_id, info in pending.items():
+
+                    peer = info[0]
+                    if(peer == peer_id):
+                        self.state.remove_pending_ping(msg_id)
+                        break
+
+            else:
+                self.state.register_failed_attempt(peer_id)

@@ -46,19 +46,31 @@ class RendServer:
 
         msg = {"type": "REGISTER", "namespace": namespace, "name": name, "port": listen_port, "ttl": ttl}
 
-        resposta = self._sender(msg)
+        try:
+            resposta = self._sender(msg)
 
-        if resposta.get('status') != "OK":
-            raise Error_Falha_Server("[RDV] Type of message received is missmatched in register")
-        
-        
-        self.log.info(f"[RDV] Sucesso em se registrar como {name}@{namespace} por {ttl}s")
-        self.log.debug(f"[RDV] Iniciando processo de auto reconnect")
-        
-        self.auto_reregister = threading.Thread(target=self._reconect, args=[namespace, name, listen_port, ttl], daemon=True) #daemon garante que caso o programa se encerre a thread também feche
-        self.auto_reregister.start()
+            if resposta is None:
+                raise Error_Falha_Server("Erro crítico ao se conectar ao servidor")
 
-        return resposta
+            if resposta.get('status') != "OK":
+                raise Error_Falha_Server("[RDV] Type of message received is missmatched in register")
+            
+            my_ip = resposta.get("ip")
+            my_port =  resposta.get("port")
+            
+            
+            self.log.info(f"[RDV] Sucesso em se registrar como {name}@{namespace} por {ttl}s")
+            self.log.info(f"[RDV] Ip e porta associados ao server: {my_ip}:{my_port}")
+            self.log.debug(f"[RDV] Iniciando processo de auto reconnect")
+            
+            self.auto_reregister = threading.Thread(target=self._reconect, args=[namespace, name, listen_port, ttl], daemon=True) #daemon garante que caso o programa se encerre a thread também feche
+            self.auto_reregister.start()
+
+            return resposta
+        
+        except:
+            self.log.debug(f"[RDV] Falha crítica, recomenda-se reiniciar o aplicativo")
+
 
     # Realisa a conexão peródica com o ttl setado
     def _reconect(self, namespace: str, name: str, listen_port: str, ttl: int = 7200):
@@ -94,24 +106,31 @@ class RendServer:
         list_peers = self._sender(msg)
 
         if list_peers.get('status') != "OK":
-            raise Error_Falha_Server("[RDV] Type of message received is missmatched in discover")
+            self.log.warning("[RDV] Strange Discover returned by server, returning last working list, if any")
+            if lista_old is None:
+                self.log.warning("[RDV] No lists in memory, critical error, please restart the aplication")
+            else:
+                return lista_old
+            
+        else:
+            list_peers = list_peers.get('peers')
+            if list_peers == []:
+                self.log.info("[RDV] No peers in this namespace, or it does not exist")
+                return []
+            final_list_peers = []
 
-        list_peers = list_peers.get('peers')
-        if list_peers == []:
-            self.log.info("[RDV] No peers in this namespace, or it does not exist")
-            return []
-        final_list_peers = []
+            if isinstance(list_peers, list) == False:
+                raise Error_Falha_Server("[RDV] Not received a list for the peers")
+            
+            self.log.debug("[RDV] Lista de peers Obtida")
 
-        if isinstance(list_peers, list) == False:
-            raise Error_Falha_Server("[RDV] Not received a list for the peers")
-        
-        self.log.debug("[RDV] Lista de peers Obtida")
+            for i in list_peers:
+                if (isinstance(i, dict)):
+                        final_list_peers.append(i)
 
-        for i in list_peers:
-            if (isinstance(i, dict)):
-                    final_list_peers.append(i)
+            lista_old = final_list_peers
 
-        return final_list_peers
+            return final_list_peers
 
     #Processo de fechar a conexão, causa thread de refresh a se encerrar
     def fechar_conexão(self, namespace: str, name: str, listen_port: int):
@@ -130,6 +149,7 @@ class RendServer:
         return
 
     #Função utilisada para enviar as mensagens ao servidor
+    #Os formatos das mensagens já são validados pela validação do config.json
     def _sender(self, msg_in):
         self.log.debug(f"[RDV] Sending to server: {msg_in}")
         msg = json.dumps(msg_in) + "\n"
